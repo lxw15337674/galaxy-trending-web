@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(opencode --version 2>/dev/null || opencode version 2>/dev/null || echo \"version unknown\")",
+      "Read(//c/Users/40417/.config/opencode/**)",
+      "Read(//c/Users/40417/**)"
+    ]
+  }
+}

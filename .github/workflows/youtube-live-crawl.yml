@@ -1,0 +1,47 @@
+name: YouTube Live Crawl
+
+on:
+  schedule:
+    - cron: '20 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: youtube-live-crawl-hourly
+  cancel-in-progress: false
+
+jobs:
+  crawl-youtube-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Shanghai
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      YOUTUBE_API_KEY_LIVE: ${{ secrets.YOUTUBE_API_KEY_LIVE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+
+      - name: Crawl YouTube live top 200
+        run: pnpm crawl:youtube:live --max-results=200 --search-pages=4 --retention-days=30 --query=live
+
+      - name: Purge old YouTube live snapshots
+        run: pnpm db:purge -- --days=30
