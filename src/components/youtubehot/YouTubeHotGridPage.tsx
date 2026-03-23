@@ -4,7 +4,8 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { SearchableCombobox, type SearchableComboboxOption } from '@/components/ui/searchable-combobox';
+import { type ComboboxOption } from '@/components/ui/combobox';
+import { FilterCombobox } from '@/components/ui/filter-combobox';
 import { YouTubeHotVideoCard } from '@/components/youtubehot/YouTubeHotVideoCard';
 import { getMessages } from '@/i18n/messages';
 import { createRegionDisplayNames, getLocalizedYouTubeRegionLabel, getYouTubeCategoryLabel } from '@/lib/youtube-hot/labels';
@@ -24,6 +25,10 @@ interface YouTubeHotHistoryResponse {
   };
   data: YouTubeHotQueryItem[];
   error?: string;
+}
+
+interface YouTubeHotGridPageProps extends YouTubeHotPageData {
+  jsonLd?: unknown;
 }
 
 function buildItemKey(item: YouTubeHotQueryItem) {
@@ -59,7 +64,7 @@ function buildRegionOptions(
         keywords: [item.regionCode, item.regionName, localizedLabel],
       };
     }),
-  ] satisfies SearchableComboboxOption[];
+  ] satisfies ComboboxOption[];
 }
 
 function buildCategoryOptions(
@@ -77,7 +82,7 @@ function buildCategoryOptions(
         keywords: [item.categoryId, item.categoryTitle, categoryLabel],
       };
     }),
-  ] satisfies SearchableComboboxOption[];
+  ] satisfies ComboboxOption[];
 }
 
 export function YouTubeHotGridPage({
@@ -93,7 +98,8 @@ export function YouTubeHotGridPage({
   generatedAt,
   errorMessage,
   locale,
-}: YouTubeHotPageData) {
+  jsonLd,
+}: YouTubeHotGridPageProps) {
   const t = getMessages(locale).youtubeHot;
   const router = useRouter();
   const pathname = usePathname();
@@ -218,10 +224,11 @@ export function YouTubeHotGridPage({
   useEffect(() => {
     if (!inView) return;
     if (isRefreshing || isLoadingMore) return;
+    if (loadError) return;
     if (loadedTotalPages <= 1 || loadedPage >= loadedTotalPages) return;
 
     void loadNextPageRef.current();
-  }, [inView, loadedPage, loadedTotalPages, isRefreshing, isLoadingMore]);
+  }, [inView, loadedPage, loadedTotalPages, isRefreshing, isLoadingMore, loadError]);
 
   const updateQuery = (patch: Partial<Record<'region' | 'category' | 'page', string>>) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -260,6 +267,7 @@ export function YouTubeHotGridPage({
       suppressHydrationWarning
       className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 text-zinc-900 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100"
     >
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} /> : null}
       <h1 className="sr-only">{t.title}</h1>
       <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-2 md:px-6 md:pt-6">
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
@@ -267,23 +275,21 @@ export function YouTubeHotGridPage({
             <div className="flex flex-wrap items-center gap-2">
               <div className="grid w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
-                  <SearchableCombobox
-                    value={region}
-                    placeholder={t.filterRegionPlaceholder}
-                    searchPlaceholder={t.filterRegionSearchPlaceholder}
-                    emptyText={t.filterNoMatch}
+                  <FilterCombobox
                     options={regionOptions}
+                    value={region}
+                    placeholder={t.filterRegionSearchPlaceholder}
+                    emptyText={t.filterNoMatch}
                     onValueChange={onRegionChange}
                   />
                 </div>
 
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
-                  <SearchableCombobox
-                    value={category}
-                    placeholder={t.filterCategoryPlaceholder}
-                    searchPlaceholder={t.filterCategorySearchPlaceholder}
-                    emptyText={t.filterNoMatch}
+                  <FilterCombobox
                     options={categoryOptions}
+                    value={category}
+                    placeholder={t.filterCategorySearchPlaceholder}
+                    emptyText={t.filterNoMatch}
                     onValueChange={onCategoryChange}
                   />
                 </div>

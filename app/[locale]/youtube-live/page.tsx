@@ -33,11 +33,6 @@ export default async function YouTubeLivePage({ params }: YouTubeLivePageProps) 
   const pageData = await buildYouTubeLivePageData(locale);
   const jsonLd = buildYouTubeLiveJsonLd(locale, pageData.items);
 
-  return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <YouTubeLiveGridPage {...pageData} />
-    </>
-  );
+  return <YouTubeLiveGridPage {...pageData} jsonLd={jsonLd} />;
 }
 

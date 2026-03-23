@@ -3,7 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { SearchableCombobox, type SearchableComboboxOption } from '@/components/ui/searchable-combobox';
+import { type ComboboxOption } from '@/components/ui/combobox';
+import { FilterCombobox } from '@/components/ui/filter-combobox';
 import { YouTubeLiveVideoCard } from '@/components/youtubehot/YouTubeLiveVideoCard';
 import type { Locale } from '@/i18n/config';
 import { getMessages } from '@/i18n/messages';
@@ -15,6 +16,7 @@ interface YouTubeLiveGridPageProps {
   fetchedAt: string;
   errorMessage?: string | null;
   locale: Locale;
+  jsonLd?: unknown;
 }
 
 function normalizeLanguageCode(value: string | null | undefined) {
@@ -46,6 +48,7 @@ export function YouTubeLiveGridPage({
   fetchedAt,
   errorMessage,
   locale,
+  jsonLd,
 }: YouTubeLiveGridPageProps) {
   const t = getMessages(locale).youtubeLive;
   const pathname = usePathname();
@@ -126,7 +129,7 @@ export function YouTubeLiveGridPage({
       .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
   }, [items]);
 
-  const languageFilterOptions = useMemo<SearchableComboboxOption[]>(
+  const languageFilterOptions = useMemo<ComboboxOption[]>(
     () => [
       { value: 'all', label: t.allLanguages },
       ...languageOptions.map((option) => ({
@@ -162,7 +165,7 @@ export function YouTubeLiveGridPage({
     });
   }, [items]);
 
-  const categoryFilterOptions = useMemo<SearchableComboboxOption[]>(
+  const categoryFilterOptions = useMemo<ComboboxOption[]>(
     () => [
       { value: 'all', label: t.allCategories },
       ...categoryOptions.map((option) => {
@@ -213,6 +216,7 @@ export function YouTubeLiveGridPage({
       suppressHydrationWarning
       className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 text-zinc-900 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100"
     >
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} /> : null}
       <h1 className="sr-only">{t.title}</h1>
       <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-2 md:px-6 md:pt-6">
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
@@ -220,23 +224,21 @@ export function YouTubeLiveGridPage({
             <div className="flex flex-wrap items-center gap-2">
               <div className="grid w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
-                  <SearchableCombobox
-                    value={activeLanguageFilter}
-                    placeholder={t.filterLanguagePlaceholder}
-                    searchPlaceholder={t.filterLanguageSearchPlaceholder}
-                    emptyText={t.filterNoMatch}
+                  <FilterCombobox
                     options={languageFilterOptions}
-                    onValueChange={(value) => updateFilter('language', value)}
+                    value={activeLanguageFilter}
+                    placeholder={t.filterLanguageSearchPlaceholder}
+                    emptyText={t.filterNoMatch}
+                    onValueChange={(nextValue) => updateFilter('language', nextValue)}
                   />
                 </div>
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
-                  <SearchableCombobox
-                    value={activeCategoryFilter}
-                    placeholder={t.filterCategoryPlaceholder}
-                    searchPlaceholder={t.filterCategorySearchPlaceholder}
-                    emptyText={t.filterNoMatch}
+                  <FilterCombobox
                     options={categoryFilterOptions}
-                    onValueChange={(value) => updateFilter('category', value)}
+                    value={activeCategoryFilter}
+                    placeholder={t.filterCategorySearchPlaceholder}
+                    emptyText={t.filterNoMatch}
+                    onValueChange={(nextValue) => updateFilter('category', nextValue)}
                   />
                 </div>
               </div>
