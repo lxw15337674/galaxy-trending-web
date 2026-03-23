@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { SearchableCombobox, type SearchableComboboxOption } from '@/components/ui/searchable-combobox';
 import { YouTubeHotVideoCard } from '@/components/youtubehot/YouTubeHotVideoCard';
-import { YouTubeHotVideoCardSkeleton } from '@/components/youtubehot/YouTubeHotVideoCardSkeleton';
 import { getMessages } from '@/i18n/messages';
 import { createRegionDisplayNames, getLocalizedYouTubeRegionLabel, getYouTubeCategoryLabel } from '@/lib/youtube-hot/labels';
 import type { YouTubeHotPageData } from '@/lib/youtube-hot/page-data';
@@ -261,11 +260,11 @@ export function YouTubeHotGridPage({
       suppressHydrationWarning
       className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 text-zinc-900 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100"
     >
-      <section className="mx-auto w-full max-w-[1920px] px-4 pt-6 md:px-6 md:pt-8">
+      <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-2 md:px-6 md:pt-6">
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="grid w-full grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
+          <CardHeader className="p-2 md:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="grid w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
                   <SearchableCombobox
                     value={region}
@@ -293,36 +292,36 @@ export function YouTubeHotGridPage({
         </Card>
 
         {errorMessage && !isRefreshing ? (
-          <Card className="mt-4 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
+          <Card className="mt-2 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
             <CardContent className="p-4 text-base text-red-700 dark:text-red-200">{errorMessage}</CardContent>
           </Card>
         ) : null}
 
         {isRefreshing ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {Array.from({ length: refreshSkeletonCount }).map((_, index) => (
-              <YouTubeHotVideoCardSkeleton key={`refresh-skeleton-${index}`} />
+              <YouTubeHotVideoCard key={`refresh-skeleton-${index}`} loading />
             ))}
           </div>
         ) : loadedItems.length === 0 ? (
-          <Card className="mt-4 border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+          <Card className="mt-2 border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
             <CardContent className="p-10 text-center text-zinc-500 dark:text-zinc-400">{t.emptyState}</CardContent>
           </Card>
         ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {loadedItems.map((item) => (
               <YouTubeHotVideoCard key={buildItemKey(item)} item={item} locale={locale} />
             ))}
             {isLoadingMore
               ? Array.from({ length: loadMoreSkeletonCount }).map((_, index) => (
-                  <YouTubeHotVideoCardSkeleton key={`load-more-skeleton-${index}`} />
+                  <YouTubeHotVideoCard key={`load-more-skeleton-${index}`} loading />
                 ))
               : null}
           </div>
         )}
 
         {loadError ? (
-          <Card className="mt-4 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
+          <Card className="mt-2 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
             <CardContent className="flex flex-wrap items-center gap-2 p-4">
               <span className="text-sm text-red-700 dark:text-red-200">{loadError}</span>
               <Button variant="outline" className="border-zinc-300 dark:border-zinc-700" onClick={() => void loadNextPageRef.current()}>

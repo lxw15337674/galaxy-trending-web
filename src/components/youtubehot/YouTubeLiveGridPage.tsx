@@ -1,12 +1,10 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import dayjs from 'dayjs';
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { SearchableCombobox, type SearchableComboboxOption } from '@/components/ui/searchable-combobox';
+import { YouTubeLiveVideoCard } from '@/components/youtubehot/YouTubeLiveVideoCard';
 import type { Locale } from '@/i18n/config';
 import { getMessages } from '@/i18n/messages';
 import { YouTubeLiveItem } from '@/lib/youtube-hot/types';
@@ -17,34 +15,6 @@ interface YouTubeLiveGridPageProps {
   fetchedAt: string;
   errorMessage?: string | null;
   locale: Locale;
-}
-
-function formatCompactNumber(value: number | null | undefined, locale: Locale) {
-  if (value == null || !Number.isFinite(value)) return '--';
-
-  if (locale === 'zh') {
-    if (value >= 100000000) return `${(value / 100000000).toFixed(1)}亿`;
-    if (value >= 10000) return `${(value / 10000).toFixed(1)}万`;
-    return new Intl.NumberFormat('zh-CN').format(value);
-  }
-
-  if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)}B`;
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return new Intl.NumberFormat('en-US').format(value);
-}
-
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return '--';
-  const parsed = dayjs(value);
-  if (!parsed.isValid()) return value;
-  return parsed.format('YYYY-MM-DD HH:mm');
-}
-
-function formatSubscriberText(item: YouTubeLiveItem, locale: Locale) {
-  const t = getMessages(locale).youtubeLive;
-  if (item.hiddenSubscriberCount) return t.cardSubscribersHidden;
-  return `${formatCompactNumber(item.subscriberCount, locale)} ${t.cardSubscriberSuffix}`;
 }
 
 function normalizeLanguageCode(value: string | null | undefined) {
@@ -243,11 +213,11 @@ export function YouTubeLiveGridPage({
       suppressHydrationWarning
       className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 text-zinc-900 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100"
     >
-      <section className="mx-auto w-full max-w-[1920px] px-4 pt-6 md:px-6 md:pt-8">
+      <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-2 md:px-6 md:pt-6">
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="grid w-full grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
+          <CardHeader className="p-2 md:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="grid w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                 <div className="w-full sm:w-[260px] xl:w-[300px]">
                   <SearchableCombobox
                     value={activeLanguageFilter}
@@ -274,13 +244,13 @@ export function YouTubeLiveGridPage({
         </Card>
 
         {errorMessage ? (
-          <Card className="mt-4 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
+          <Card className="mt-2 border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
             <CardContent className="p-4 text-base text-red-700 dark:text-red-200">{errorMessage}</CardContent>
           </Card>
         ) : null}
 
         {!errorMessage && filteredItems.length === 0 ? (
-          <Card className="mt-4 border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+          <Card className="mt-2 border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
             <CardContent className="p-10 text-center text-zinc-500 dark:text-zinc-400">
               {t.emptyState}
             </CardContent>
@@ -288,89 +258,15 @@ export function YouTubeLiveGridPage({
         ) : null}
 
         {filteredItems.length > 0 ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {filteredItems.map((item) => (
-              <Card
+              <YouTubeLiveVideoCard
                 key={item.videoId}
-                className="flex h-full flex-col overflow-hidden rounded-2xl border-0 bg-transparent p-2 text-zinc-900 shadow-sm transition-colors duration-500 ease-out hover:bg-zinc-100/80 dark:text-zinc-100 dark:hover:bg-zinc-800/70"
-              >
-                <a
-                  href={item.videoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="relative block aspect-video w-full overflow-hidden rounded-2xl bg-zinc-100 dark:bg-zinc-900"
-                >
-                  {item.thumbnailUrl ? (
-                    <Image
-                      src={item.thumbnailUrl}
-                      alt={item.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-base text-zinc-500 dark:text-zinc-400">{t.cardNoThumbnail}</div>
-                  )}
-                </a>
-
-                <CardHeader className="flex flex-col gap-2 p-2 pb-2">
-                  <a
-                    href={item.videoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="line-clamp-2 text-base font-semibold leading-6 hover:underline"
-                  >
-                    {item.title}
-                  </a>
-                </CardHeader>
-
-                <CardContent className="mt-auto flex flex-col gap-2 p-0 pt-0">
-                  <div className="flex items-start gap-2">
-                    <a
-                      href={item.channelUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="relative mt-0.5 block size-8 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700"
-                    >
-                      {item.channelAvatarUrl ? (
-                        <Image src={item.channelAvatarUrl} alt={item.channelTitle} fill sizes="32px" className="object-cover" />
-                      ) : null}
-                    </a>
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={item.channelUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-sm leading-5 text-zinc-800 hover:underline dark:text-zinc-100"
-                      >
-                        {item.channelTitle}
-                      </a>
-                      <p className="text-sm leading-5 text-zinc-500 dark:text-zinc-300">{formatSubscriberText(item, locale)}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="default" className="text-sm">
-                      #{item.rank}
-                    </Badge>
-                    <Badge variant="secondary" className="text-sm">
-                      {formatCompactNumber(item.concurrentViewers, locale)} {t.cardWatching}
-                    </Badge>
-                    <Badge variant="outline" className="border-zinc-300 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                      {t.cardViews} {formatCompactNumber(item.viewCount, locale)}
-                    </Badge>
-                    <Badge variant="outline" className="border-zinc-300 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                      {t.cardStartedAt} {formatDateTime(item.startedAt)}
-                    </Badge>
-                    <Badge variant="outline" className="border-zinc-300 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                      {formatCategoryLabel(item)}
-                    </Badge>
-                    <Badge variant="outline" className="border-zinc-300 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                      {formatLanguageLabel(item.defaultAudioLanguage)}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
+                item={item}
+                locale={locale}
+                categoryLabel={formatCategoryLabel(item)}
+                languageLabel={formatLanguageLabel(item.defaultAudioLanguage)}
+              />
             ))}
           </div>
         ) : null}

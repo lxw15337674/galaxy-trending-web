@@ -44,7 +44,7 @@ export function SiteHeaderContent() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-14 w-full max-w-[1920px] items-center px-4 md:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-[1920px] lg:max-w-[80%] items-center px-4 md:px-6">
         <NavigationMenu className="max-w-none justify-start">
           <NavigationMenuList>
             {siteNav.map((item) => {
