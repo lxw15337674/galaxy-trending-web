@@ -1,15 +1,16 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { SiteHeader } from '@/components/SiteHeader';
-import { stripLocalePrefix } from '@/i18n/config';
 
 export function AppShellHeader() {
-  const pathname = usePathname();
-  const barePath = stripLocalePrefix(pathname ?? '/');
+  const [mounted, setMounted] = useState(false);
 
-  if (!pathname) return null;
-  if (barePath === '/') return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   return <SiteHeader />;
 }

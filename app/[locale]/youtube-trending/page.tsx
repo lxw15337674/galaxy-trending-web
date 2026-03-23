@@ -38,10 +38,5 @@ export default async function YouTubeHotPage({ params, searchParams }: YouTubeHo
   const pageData = await buildYouTubeHotPageData(resolvedSearchParams, locale);
   const jsonLd = buildYouTubeHotJsonLd(locale, pageData.items);
 
-  return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <YouTubeHotGridPage {...pageData} />
-    </>
-  );
+  return <YouTubeHotGridPage {...pageData} jsonLd={jsonLd} />;
 }
