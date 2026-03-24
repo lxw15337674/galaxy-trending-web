@@ -2,10 +2,13 @@ import { ChevronDown } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/card';
 import { YouTubeVideoCard } from '@/components/youtubehot/YouTubeVideoCard';
 
+const PAGE_SECTION_CLASS = 'mx-auto w-full px-4 pt-6 md:px-6 md:pt-8 lg:w-[80%]';
+const CARD_GRID_CLASS = 'mt-4 grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4';
+
 export default function YouTubeLiveLoading() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
-      <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-6 md:px-6 md:pt-8">
+      <section className={PAGE_SECTION_CLASS}>
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
           <CardHeader className="p-2 md:p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -23,7 +26,7 @@ export default function YouTubeLiveLoading() {
           </CardHeader>
         </Card>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className={CARD_GRID_CLASS}>
           {Array.from({ length: 10 }).map((_, idx) => (
             <YouTubeVideoCard key={idx} loading tagsCount={4} />
           ))}

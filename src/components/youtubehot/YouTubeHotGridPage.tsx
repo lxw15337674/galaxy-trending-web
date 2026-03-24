@@ -43,6 +43,8 @@ interface YouTubeHotGridPageProps {
 }
 
 const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SECTION_CLASS = 'mx-auto w-full px-4 pt-2 md:px-6 md:pt-6 lg:w-[80%]';
+const CARD_GRID_CLASS = 'mt-2 grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4';
 const cachedFiltersByRegion = new Map<string, YouTubeHotFiltersResponse['data']>();
 const filtersRequestsByRegion = new Map<string, Promise<YouTubeHotFiltersResponse['data']>>();
 
@@ -473,7 +475,7 @@ export function YouTubeHotGridPage({ locale, userRegion, jsonLd }: YouTubeHotGri
     >
       {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} /> : null}
       <h1 className="sr-only">{t.title}</h1>
-      <section className="mx-auto w-full max-w-[1920px] lg:max-w-[80%] px-4 pt-2 md:px-6 md:pt-6">
+      <section className={PAGE_SECTION_CLASS}>
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
           <CardHeader className="p-2 md:p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -511,7 +513,7 @@ export function YouTubeHotGridPage({ locale, userRegion, jsonLd }: YouTubeHotGri
         ) : null}
 
         {showCardSkeleton ? (
-          <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className={CARD_GRID_CLASS}>
             {Array.from({ length: pageSize }).map((_, index) => (
               <YouTubeHotVideoCard key={`refresh-skeleton-${index}`} loading />
             ))}
@@ -525,7 +527,7 @@ export function YouTubeHotGridPage({ locale, userRegion, jsonLd }: YouTubeHotGri
         ) : null}
 
         {!showCardSkeleton && items.length > 0 ? (
-          <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className={CARD_GRID_CLASS}>
             {items.map((item) => (
               <YouTubeHotVideoCard key={buildItemKey(item)} item={item} locale={locale} />
             ))}
