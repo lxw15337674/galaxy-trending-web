@@ -1,17 +1,12 @@
 import type { Locale } from '@/i18n/config';
 import { getMessages } from '@/i18n/messages';
 import { classifyRuntimeError, logServerError } from '@/lib/server/runtime-error';
+import { readSearchParamRaw, type SearchParamsInput } from '@/lib/server/search-params';
 import {
   listLatestYouTubeHotFilters,
   queryLatestYouTubeHot,
 } from '@/lib/youtube-hot/db';
 import type { YouTubeCategory, YouTubeHotQueryItem, YouTubeRegion } from '@/lib/youtube-hot/types';
-
-interface RawSearchParams {
-  region?: string | string[];
-  category?: string | string[];
-  page?: string | string[];
-}
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -58,12 +53,12 @@ export interface YouTubeHotPageData {
 }
 
 export async function buildYouTubeHotPageData(
-  rawSearchParams: RawSearchParams | undefined,
+  rawSearchParams: SearchParamsInput,
   locale: Locale,
 ): Promise<YouTubeHotPageData> {
   const t = getMessages(locale).youtubeHot;
   const fallbackNow = new Date().toISOString();
-  const searchParams = rawSearchParams ?? {};
+  const searchParams = rawSearchParams;
 
   try {
     const filters = await listLatestYouTubeHotFilters();
@@ -84,9 +79,9 @@ export async function buildYouTubeHotPageData(
       };
     }
 
-    const requestedRegion = normalizeFilterValue(searchParams.region)?.toUpperCase() ?? null;
-    const requestedCategory = normalizeFilterValue(searchParams.category) ?? null;
-    const page = normalizePage(searchParams.page);
+    const requestedRegion = normalizeFilterValue(readSearchParamRaw(searchParams, 'region'))?.toUpperCase() ?? null;
+    const requestedCategory = normalizeFilterValue(readSearchParamRaw(searchParams, 'category')) ?? null;
+    const page = normalizePage(readSearchParamRaw(searchParams, 'page'));
 
     const region = hasRegion(filters.regions, requestedRegion) ? requestedRegion : null;
     const category = hasCategory(filters.categories, requestedCategory) ? requestedCategory : null;

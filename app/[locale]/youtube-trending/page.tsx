@@ -4,16 +4,13 @@ import { notFound } from 'next/navigation';
 import { YouTubeHotGridPage } from '@/components/youtubehot/YouTubeHotGridPage';
 import { type Locale } from '@/i18n/config';
 import { routing } from '@/i18n/routing';
+import type { SearchParamsInput } from '@/lib/server/search-params';
 import { buildYouTubeHotPageData } from '@/lib/youtube-hot/page-data';
 import { buildYouTubeHotJsonLd, buildYouTubeHotMetadata } from '@/lib/youtube-hot/seo';
 
 interface YouTubeHotPageProps {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{
-    region?: string | string[];
-    category?: string | string[];
-    page?: string | string[];
-  }>;
+  searchParams?: Promise<SearchParamsInput>;
 }
 
 export const revalidate = 600;
