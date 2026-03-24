@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import type { ReactNode } from 'react';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -6,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 export interface YouTubeVideoCardTag {
   text: string;
+  icon?: ReactNode;
   variant?: BadgeProps['variant'];
   title?: string;
   className?: string;
@@ -127,6 +129,7 @@ export function YouTubeVideoCard(props: YouTubeVideoCardProps) {
         <div className="flex flex-wrap gap-2">
           {props.tags.map((tag, index) => (
             <Badge key={`${tag.text}-${index}`} variant={tag.variant} title={tag.title} className={cn('text-xs', tag.className)}>
+              {tag.icon ? <span className="mr-1 inline-flex items-center">{tag.icon}</span> : null}
               {tag.text}
             </Badge>
           ))}

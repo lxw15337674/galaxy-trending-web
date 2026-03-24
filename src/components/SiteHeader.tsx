@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ModeToggle } from './ModeToggle';
 import { Suspense, useEffect } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Github, Languages } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ import { type Locale, localeFromPathname, stripLocalePrefix, withLocalePrefix } 
 import { getMessages } from '@/i18n/messages';
 
 const SHELL_CONTAINER_CLASS = 'mx-auto flex h-14 w-full items-center px-4 md:px-6 lg:w-[80%]';
+const GITHUB_REPO_URL = 'https://github.com/lxw15337674/media-trending-web';
 
 function isLocaleSwitchablePath(barePath: string) {
   return barePath === '/youtube-trending' || barePath === '/youtube-live';
@@ -58,10 +59,16 @@ function SiteHeaderFrame({
   ];
 
   const switchablePath = pathname ? isLocaleSwitchablePath(barePath) : false;
-  const switchPath = switchablePath
-    ? withLocalePrefix(barePath, targetLocale)
-    : withLocalePrefix('/youtube-trending', targetLocale);
-  const switchHref = switchablePath && switchQuery ? `${switchPath}?${switchQuery}` : switchPath;
+  const buildLocaleHref = (nextLocale: Locale) => {
+    const nextPath = switchablePath
+      ? withLocalePrefix(barePath, nextLocale)
+      : withLocalePrefix('/youtube-trending', nextLocale);
+    return switchablePath && switchQuery ? `${nextPath}?${switchQuery}` : nextPath;
+  };
+  const localeOptions: Array<{ locale: Locale; label: string; href: string }> = [
+    { locale: 'en', label: 'English', href: buildLocaleHref('en') },
+    { locale: 'zh', label: '中文', href: buildLocaleHref('zh') },
+  ];
   const activeItem =
     siteNav.find((item) => pathname && (pathname === item.href || pathname.startsWith(`${item.href}/`))) ?? siteNav[0];
 
@@ -127,17 +134,38 @@ function SiteHeaderFrame({
         </NavigationMenu>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link
-              href={switchHref}
-              onClick={() => {
-                document.cookie = `lang=${targetLocale}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
-              }}
-            >
-              {messages.common.switchLanguage}
-            </Link>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label={messages.common.switchLanguage}>
+                <Languages className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {localeOptions.map((option) => {
+                const isActive = option.locale === locale;
+                return (
+                  <DropdownMenuItem key={option.locale} asChild>
+                    <Link
+                      href={option.href}
+                      className="flex w-full items-center gap-2"
+                      onClick={() => {
+                        document.cookie = `lang=${option.locale}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {isActive ? <Check className="ml-auto size-4" /> : null}
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ModeToggle />
+          <Button variant="outline" size="sm" asChild>
+            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub repository">
+              <Github className="size-4" />
+            </a>
+          </Button>
         </div>
       </div>
     </header>
