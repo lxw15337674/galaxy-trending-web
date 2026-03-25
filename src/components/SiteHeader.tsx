@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import { ModeToggle } from './ModeToggle';
 import { Suspense, useEffect } from 'react';
-import { Check, ChevronDown, Github, Globe } from 'lucide-react';
+import { Check, ChevronDown, EllipsisVertical, Github, Globe } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ function SiteHeaderFrame({
   pathname?: string | null;
   switchQuery?: string;
 }) {
+  const { setTheme } = useTheme();
   const messages = getMessages(locale);
   const barePath = stripLocalePrefix(pathname ?? '/');
   const siteNav = [
@@ -164,12 +166,47 @@ function SiteHeaderFrame({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
-          <ModeToggle />
-          <Button variant="outline" size="sm" asChild>
-            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub repository">
-              <Github className="size-4" />
-            </a>
-          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="md:hidden"
+                aria-label="More options"
+              >
+                <EllipsisVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Theme</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setTheme('light')}>Light</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('dark')}>Dark</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('system')}>System</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a
+                  href={GITHUB_REPO_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full items-center gap-2"
+                  aria-label="GitHub repository"
+                >
+                  <Github className="size-4" />
+                  <span>GitHub</span>
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="hidden items-center gap-2 md:flex">
+            <ModeToggle />
+            <Button variant="outline" size="sm" asChild>
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub repository">
+                <Github className="size-4" />
+              </a>
+            </Button>
+          </div>
         </div>
       </div>
     </header>
