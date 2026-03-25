@@ -310,33 +310,38 @@ export async function getLatestYouTubeLiveSnapshot(): Promise<YouTubeLiveSnapsho
 
 export async function purgeYouTubeLiveSnapshotsBefore(cutoffIso: string) {
   const summary = await db.transaction(async (tx) => {
-    const toDelete = await tx.all<SnapshotIdRow>(sql`
-      SELECT id
+    const snapshotRows = await tx.all<PurgeCountRow>(sql`
+      SELECT COUNT(*) as total
       FROM youtube_live_snapshots
       WHERE crawled_at < ${cutoffIso}
     `);
+    const deletedSnapshots = Number(snapshotRows[0]?.total ?? 0);
 
-    if (!toDelete.length) {
+    if (deletedSnapshots === 0) {
       return {
         deletedSnapshots: 0,
         deletedItems: 0,
       };
     }
 
-    let deletedItems = 0;
-    for (const row of toDelete) {
-      const itemRows = await tx.all<PurgeCountRow>(sql`
-        SELECT COUNT(*) as total
-        FROM youtube_live_items
-        WHERE snapshot_id = ${row.id}
-      `);
-      deletedItems += Number(itemRows[0]?.total ?? 0);
-      await tx.run(sql`DELETE FROM youtube_live_items WHERE snapshot_id = ${row.id}`);
-      await tx.run(sql`DELETE FROM youtube_live_snapshots WHERE id = ${row.id}`);
-    }
+    const itemRows = await tx.all<PurgeCountRow>(sql`
+      SELECT COUNT(*) as total
+      FROM youtube_live_items
+      WHERE snapshot_id IN (
+        SELECT id
+        FROM youtube_live_snapshots
+        WHERE crawled_at < ${cutoffIso}
+      )
+    `);
+    const deletedItems = Number(itemRows[0]?.total ?? 0);
+
+    await tx.run(sql`
+      DELETE FROM youtube_live_snapshots
+      WHERE crawled_at < ${cutoffIso}
+    `);
 
     return {
-      deletedSnapshots: toDelete.length,
+      deletedSnapshots,
       deletedItems,
     };
   });
