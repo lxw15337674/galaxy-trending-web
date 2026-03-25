@@ -28,7 +28,7 @@ import { getLocaleLabel } from '@/i18n/locale-meta';
 import { getMessages } from '@/i18n/messages';
 
 const SHELL_CONTAINER_CLASS = 'mx-auto flex h-14 w-full items-center px-4 md:px-6 lg:w-[80%]';
-const GITHUB_REPO_URL = 'https://github.com/lxw15337674/media-trending-web';
+const GITHUB_REPO_URL = 'https://github.com/lxw15337674/galaxy-trending-web';
 
 function isLocaleSwitchablePath(barePath: string) {
   return barePath === '/youtube-trending' || barePath === '/youtube-live';

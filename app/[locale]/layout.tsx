@@ -15,8 +15,8 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   metadataBase: getSiteOrigin(),
   title: {
-    default: 'Media Trending Web',
-    template: '%s | Media Trending Web',
+    default: 'Galaxy Trending',
+    template: '%s | Galaxy Trending',
   },
   description: 'Hourly YouTube trending video ranking with multilingual filters and global live insights.',
   keywords: [

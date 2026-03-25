@@ -1,4 +1,4 @@
-# Media Trending Web
+# Galaxy Trending Web
 
 YouTube-only trending site with:
 

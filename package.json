@@ -1,5 +1,5 @@
 {
-  "name": "media-trending-web",
+  "name": "galaxy-trending-web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,8 +14,8 @@
     "trending:init-schema": "drizzle-kit migrate",
     "crawl:youtube:trending": "tsx scripts/crawl-youtube-trending-hourly.ts",
     "crawl:youtube:live": "tsx scripts/crawl-youtube-live.ts",
-    "deploy:cloudflare": "npx wrangler deploy --config dist/server/wrangler.json --name website-hot-history",
-    "deploy:cloudflare:preview": "npx wrangler deploy --dry-run --config dist/server/wrangler.json --name website-hot-history",
+    "deploy:cloudflare": "npx wrangler deploy --config dist/server/wrangler.json --name galaxy-trending-web",
+    "deploy:cloudflare:preview": "npx wrangler deploy --dry-run --config dist/server/wrangler.json --name galaxy-trending-web",
     "lint:vinext": "vinext lint"
   },
   "dependencies": {

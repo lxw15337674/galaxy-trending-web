@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "website-hot-history",
+  "name": "galaxy-trending-web",
   "workers_dev": false,
   "compatibility_date": "2026-03-17",
   "compatibility_flags": [
@@ -23,7 +23,10 @@
   "images": {
     "binding": "IMAGES"
   },
-    "observability": {
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://trending.bhwa233.com"
+  },
+  "observability": {
       "logs": {
         "enabled": true,
         "invocation_logs": true
@@ -31,5 +34,5 @@
       "traces": {
         "enabled": true
       }
-    }
+  }
 }

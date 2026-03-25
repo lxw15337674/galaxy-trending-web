@@ -70,7 +70,7 @@ export function buildYouTubeLiveMetadata(locale: Locale): Metadata {
       title: copy.title,
       description: copy.description,
       locale: copy.inLanguage,
-      siteName: 'Media Trending Web',
+      siteName: 'Galaxy Trending',
     },
     twitter: {
       card: 'summary_large_image',
