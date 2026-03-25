@@ -1,4 +1,5 @@
 import { MetadataRoute } from 'next';
+import { LOCALES } from '@/i18n/config';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 import { getLatestPublishedBatch } from '@/lib/youtube-hot/db';
 import { getLatestYouTubeLiveSnapshot } from '@/lib/youtube-live/db';
@@ -28,30 +29,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     liveLastModified = now;
   }
 
-  return [
+  return LOCALES.flatMap((locale) => [
     {
-      url: toAbsoluteUrl('/en/youtube-trending'),
+      url: toAbsoluteUrl(`/${locale}`),
+      lastModified: now,
+      changeFrequency: 'daily' as const,
+      priority: locale === 'en' ? 0.8 : 0.7,
+    },
+    {
+      url: toAbsoluteUrl(`/${locale}/youtube-trending`),
       lastModified: trendingLastModified,
-      changeFrequency: 'hourly',
-      priority: 1,
+      changeFrequency: 'hourly' as const,
+      priority: locale === 'en' ? 1 : 0.9,
     },
     {
-      url: toAbsoluteUrl('/en/youtube-live'),
+      url: toAbsoluteUrl(`/${locale}/youtube-live`),
       lastModified: liveLastModified,
-      changeFrequency: 'daily',
-      priority: 0.6,
+      changeFrequency: 'daily' as const,
+      priority: locale === 'en' ? 0.6 : 0.5,
     },
-    {
-      url: toAbsoluteUrl('/zh/youtube-trending'),
-      lastModified: trendingLastModified,
-      changeFrequency: 'hourly',
-      priority: 0.9,
-    },
-    {
-      url: toAbsoluteUrl('/zh/youtube-live'),
-      lastModified: liveLastModified,
-      changeFrequency: 'daily',
-      priority: 0.5,
-    },
-  ];
+  ]);
 }

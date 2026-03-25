@@ -3,14 +3,11 @@ import { hasLocale } from 'next-intl';
 import { NextRequest, NextResponse } from 'next/server';
 import { detectLocaleFromAcceptLanguage, isLocale } from '@/i18n/config';
 import { routing } from '@/i18n/routing';
-import { getRequestCountryCode } from '@/lib/server/request-country';
-import { DEFAULT_YOUTUBE_HOT_REGION_CODES } from '@/lib/youtube-hot/default-regions';
 
 const handleI18nRouting = createMiddleware(routing);
-const youtubeHotRegionSet = new Set<string>(DEFAULT_YOUTUBE_HOT_REGION_CODES);
 
 export function proxy(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
   if (pathname === '/') {
     return handleI18nRouting(request);
@@ -29,17 +26,6 @@ export function proxy(request: NextRequest) {
       : detectLocaleFromAcceptLanguage(request.headers.get('accept-language'));
 
     redirectUrl.pathname = `/${preferredLocale}${pathname}`;
-    return NextResponse.redirect(redirectUrl, 307);
-  }
-
-  const barePath = pathname.split('/').slice(2).join('/');
-  if (barePath === 'youtube-trending' && !searchParams.has('region')) {
-    const redirectUrl = request.nextUrl.clone();
-    const requestCountryCode = getRequestCountryCode(request.headers);
-    const defaultRegion =
-      requestCountryCode && youtubeHotRegionSet.has(requestCountryCode) ? requestCountryCode : 'all';
-
-    redirectUrl.searchParams.set('region', defaultRegion);
     return NextResponse.redirect(redirectUrl, 307);
   }
 
