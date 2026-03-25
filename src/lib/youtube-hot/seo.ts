@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { LOCALES, type Locale } from '@/i18n/config';
-import { getHtmlLang, getIntlLocale } from '@/i18n/locale-meta';
+import { type Locale } from '@/i18n/config';
+import { getIntlLocale } from '@/i18n/locale-meta';
+import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 import type { YouTubeHotQueryItem } from '@/lib/youtube-hot/types';
 
@@ -53,11 +54,6 @@ function resolveMetadataCopy(locale: Locale) {
   };
 }
 
-function buildLanguageAlternates(pathname: string) {
-  const entries = LOCALES.map((locale) => [getHtmlLang(locale), `/${locale}${pathname}`]);
-  return Object.fromEntries([...entries, ['x-default', `/en${pathname}`]]) as Record<string, string>;
-}
-
 export function buildYouTubeHotMetadata(locale: Locale): Metadata {
   const copy = resolveMetadataCopy(locale);
   const absoluteCanonical = buildAbsoluteUrl(copy.canonicalPath);
@@ -67,8 +63,8 @@ export function buildYouTubeHotMetadata(locale: Locale): Metadata {
     description: copy.description,
     keywords: copy.keywords,
     alternates: {
-      canonical: copy.canonicalPath,
-      languages: buildLanguageAlternates('/youtube-trending'),
+      canonical: absoluteCanonical,
+      languages: buildLocaleAlternates('/youtube-trending'),
     },
     openGraph: {
       type: 'website',

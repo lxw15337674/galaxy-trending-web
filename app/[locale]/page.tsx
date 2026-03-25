@@ -6,6 +6,7 @@ import { LOCALES, type Locale } from '@/i18n/config';
 import { getLocaleLabel } from '@/i18n/locale-meta';
 import { getMessages } from '@/i18n/messages';
 import { routing } from '@/i18n/routing';
+import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 
 interface LocaleIndexPageProps {
@@ -20,15 +21,11 @@ function resolveLocale(locale: string): Locale {
   return locale;
 }
 
-function buildLanguageAlternates() {
-  const entries = LOCALES.map((locale) => [locale, `/${locale}`]);
-  return Object.fromEntries([...entries, ['x-default', '/en']]) as Record<string, string>;
-}
-
 export async function generateMetadata({ params }: LocaleIndexPageProps): Promise<Metadata> {
   const { locale: requestedLocale } = await params;
   const locale = resolveLocale(requestedLocale);
   const messages = getMessages(locale).home;
+  const absoluteCanonical = toAbsoluteUrl(`/${locale}`);
 
   return {
     title: {
@@ -36,12 +33,12 @@ export async function generateMetadata({ params }: LocaleIndexPageProps): Promis
     },
     description: messages.metadataDescription,
     alternates: {
-      canonical: `/${locale}`,
-      languages: buildLanguageAlternates(),
+      canonical: absoluteCanonical,
+      languages: buildLocaleAlternates('/'),
     },
     openGraph: {
       type: 'website',
-      url: toAbsoluteUrl(`/${locale}`),
+      url: absoluteCanonical,
       title: messages.metadataTitle,
       description: messages.metadataDescription,
       siteName: 'Galaxy Trending',
