@@ -289,6 +289,29 @@ export function YouTubeHotGridPage({ locale, userRegion, jsonLd, initialData }: 
   const activeSort = normalizeYouTubeHotSort(requestedSort, toRegionContext(activeRegion));
   const queryKey = `${activeRegion}|${activeCategory}|${activeSort}|${pageSize}`;
 
+  const updateQuery = useCallback((patch: Partial<Record<'region' | 'category' | 'sort' | 'page', string>>) => {
+    const currentSearch = searchParams.toString();
+    const next = new URLSearchParams(currentSearch);
+
+    for (const [key, value] of Object.entries(patch)) {
+      if (!value || (key !== 'page' && value === 'all') || (key === 'page' && value === '1')) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+    }
+
+    const nextQuery = next.toString();
+    if (nextQuery === currentSearch) return;
+
+    setLoadError(null);
+    setDataLoading(true);
+    startTransition(() => {
+      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    });
+  }, [pathname, router, searchParams]);
+
   useEffect(() => {
     latestQueryKeyRef.current = queryKey;
   }, [queryKey]);
@@ -496,29 +519,6 @@ export function YouTubeHotGridPage({ locale, userRegion, jsonLd, initialData }: 
 
     void loadNextPageRef.current();
   }, [dataLoading, filtersLoading, inView, isLoadingMore, loadError, page, totalPages]);
-
-  const updateQuery = useCallback((patch: Partial<Record<'region' | 'category' | 'sort' | 'page', string>>) => {
-    const currentSearch = searchParams.toString();
-    const next = new URLSearchParams(currentSearch);
-
-    for (const [key, value] of Object.entries(patch)) {
-      if (!value || (key !== 'page' && value === 'all') || (key === 'page' && value === '1')) {
-        next.delete(key);
-      } else {
-        next.set(key, value);
-      }
-    }
-
-    const nextQuery = next.toString();
-    if (nextQuery === currentSearch) return;
-
-    setLoadError(null);
-    setDataLoading(true);
-    startTransition(() => {
-      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      router.replace(nextUrl, { scroll: false });
-    });
-  }, [pathname, router, searchParams]);
 
   const onRegionChange = (value: string) => {
     const nextSort = normalizeYouTubeHotSort(requestedSort, toRegionContext(value));
