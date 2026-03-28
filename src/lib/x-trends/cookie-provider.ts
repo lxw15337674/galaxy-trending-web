@@ -6,6 +6,10 @@ type InMemoryStorageState = Exclude<ResolvedStorageState, string>;
 type StorageStateCookie = InMemoryStorageState['cookies'][number];
 
 const FIXED_X_COOKIE_WEBSITE = 'x.com';
+const ADMIN_API_MAX_RETRIES = 5;
+const ADMIN_API_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const ADMIN_API_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
 interface RawCookieRecord {
   name?: unknown;
@@ -24,6 +28,8 @@ interface AdminApiSuccessPayload {
   success?: boolean;
   error?: unknown;
   message?: unknown;
+  code?: unknown;
+  requestId?: unknown;
   data?: {
     website?: unknown;
     normalizedWebsite?: unknown;
@@ -35,6 +41,17 @@ interface AdminApiSuccessPayload {
 
 function getString(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function truncateText(value: string | null, maxLength = 240) {
+  if (!value) return null;
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}...`;
 }
 
 function normalizeSameSite(value: unknown): StorageStateCookie['sameSite'] {
@@ -170,6 +187,30 @@ function extractCookieArrayFromContent(content: unknown, matchedWebsite: string 
   return null;
 }
 
+function buildAdminApiError(params: {
+  status: number;
+  payload: AdminApiSuccessPayload | null;
+  rawText: string | null;
+  attempt: number;
+  regionKey: string;
+}) {
+  const detailParts = [
+    getString(params.payload?.code) ? `code=${getString(params.payload?.code)}` : null,
+    getString(params.payload?.error) ? `error=${getString(params.payload?.error)}` : null,
+    getString(params.payload?.message) ? `message=${getString(params.payload?.message)}` : null,
+    getString(params.payload?.requestId) ? `requestId=${getString(params.payload?.requestId)}` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  const bodySnippet = truncateText(params.rawText);
+  if (bodySnippet && !detailParts.some((part) => part.includes(bodySnippet))) {
+    detailParts.push(`body=${bodySnippet}`);
+  }
+
+  return new Error(
+    `Admin API cookie fetch failed status=${params.status} attempt=${params.attempt}/${ADMIN_API_MAX_RETRIES} region=${params.regionKey}${detailParts.length ? ` ${detailParts.join(' ')}` : ''}`,
+  );
+}
+
 async function fetchAdminApiCookieConfig(target: XTrendTarget) {
   const baseUrl = target.adminApiBaseUrl?.trim();
   const apiKey = target.adminApiKey?.trim();
@@ -183,30 +224,58 @@ async function fetchAdminApiCookieConfig(target: XTrendTarget) {
   const url = new URL('/api/admin/gist-cookie', baseUrl);
   url.searchParams.set('website', FIXED_X_COOKIE_WEBSITE);
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'x-api-key': apiKey,
-    },
-  });
+  let lastError: Error | null = null;
 
-  let payload: AdminApiSuccessPayload | null = null;
-  try {
-    payload = (await response.json()) as AdminApiSuccessPayload;
-  } catch {
-    payload = null;
+  for (let attempt = 1; attempt <= ADMIN_API_MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'User-Agent': ADMIN_API_USER_AGENT,
+          'x-api-key': apiKey,
+        },
+      });
+
+      const rawText = await response.text();
+      const parsedPayload = rawText ? (parseJsonString(rawText) as AdminApiSuccessPayload | null) : null;
+
+      if (!response.ok) {
+        lastError = buildAdminApiError({
+          status: response.status,
+          payload: parsedPayload,
+          rawText,
+          attempt,
+          regionKey: target.regionKey,
+        });
+
+        if (attempt < ADMIN_API_MAX_RETRIES && ADMIN_API_RETRYABLE_STATUS.has(response.status)) {
+          await sleep(attempt * 1_500);
+          continue;
+        }
+
+        throw lastError;
+      }
+
+      if (!parsedPayload?.success || !parsedPayload.data) {
+        throw new Error(
+          `Admin API cookie fetch returned unexpected payload for region=${target.regionKey}${rawText ? ` body=${truncateText(rawText)}` : ''}`,
+        );
+      }
+
+      return parsedPayload.data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < ADMIN_API_MAX_RETRIES) {
+        await sleep(attempt * 1_500);
+        continue;
+      }
+    }
   }
 
-  if (!response.ok) {
-    const detail = getString(payload?.error) || getString(payload?.message);
-    throw new Error(`Admin API cookie fetch failed status=${response.status}${detail ? ` detail=${detail}` : ''}`);
-  }
-
-  if (!payload?.success || !payload.data) {
-    throw new Error(`Admin API cookie fetch returned unexpected payload for region=${target.regionKey}`);
-  }
-
-  return payload.data;
+  throw lastError ?? new Error(`Admin API cookie fetch failed for region=${target.regionKey}`);
 }
 
 export async function resolveXTrendStorageState(target: XTrendTarget): Promise<ResolvedStorageState> {
@@ -220,7 +289,8 @@ export async function resolveXTrendStorageState(target: XTrendTarget): Promise<R
   }
 
   const payload = await fetchAdminApiCookieConfig(target);
-  const matchedWebsite = getString(payload.matchedWebsite) ?? getString(payload.normalizedWebsite) ?? FIXED_X_COOKIE_WEBSITE;
+  const matchedWebsite =
+    getString(payload.matchedWebsite) ?? getString(payload.normalizedWebsite) ?? FIXED_X_COOKIE_WEBSITE;
   const cookieArray = extractCookieArrayFromContent(payload.content, matchedWebsite);
 
   if (!cookieArray?.length) {
