@@ -1,7 +1,14 @@
 import { existsSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Response } from 'playwright-core';
 import { resolveXTrendStorageState } from './cookie-provider';
-import { XTrendRegionResult, XTrendTarget, type XTrendExtractionSource, type XTrendItem } from './types';
+import {
+  XTrendRegionResult,
+  XTrendTarget,
+  type XTrendExtractionSource,
+  type XTrendFailureCode,
+  type XTrendItem,
+  type XTrendRegionTimings,
+} from './types';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_WAIT_AFTER_LOAD_MS = 1_000;
@@ -44,6 +51,16 @@ interface CapturedApiHeaders {
   xTwitterActiveUser: string;
   xTwitterAuthType: string;
   xTwitterClientLanguage: string;
+}
+
+class XTrendCrawlerError extends Error {
+  constructor(
+    readonly code: XTrendFailureCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'XTrendCrawlerError';
+  }
 }
 
 function sleep(ms: number) {
@@ -323,6 +340,26 @@ function toErrorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function getFailureCode(error: unknown, fallback: XTrendFailureCode): XTrendFailureCode {
+  return error instanceof XTrendCrawlerError ? error.code : fallback;
+}
+
+function createEmptyTimings(): XTrendRegionTimings {
+  return {
+    switchRegionMs: 0,
+    extractTrendsMs: 0,
+    totalMs: 0,
+  };
+}
+
+function buildTimings(regionStartedAt: number, switchRegionMs: number, extractTrendsMs: number): XTrendRegionTimings {
+  return {
+    switchRegionMs,
+    extractTrendsMs,
+    totalMs: Math.max(0, Date.now() - regionStartedAt),
+  };
+}
+
 function resolveBrowserExecutablePath(target: XTrendTarget) {
   const explicitPath = target.browserExecutablePath?.trim();
   if (explicitPath) {
@@ -374,17 +411,51 @@ async function openBrowserSession(params: {
   target: XTrendTarget;
   headless: boolean;
 }): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
-  const storageState = await resolveXTrendStorageState(params.target);
-  const browser = await chromium.launch(getBrowserLaunchOptions(params.target, params.headless));
-  const context = await browser.newContext({
-    locale: params.target.locale?.trim() || DEFAULT_LOCALE,
-    storageState,
-    viewport: { width: 1440, height: 1600 },
-    userAgent: DEFAULT_USER_AGENT,
-  });
-  const page = await context.newPage();
+  let storageState;
+  try {
+    storageState = await resolveXTrendStorageState(params.target);
+  } catch (error) {
+    throw new XTrendCrawlerError(
+      'cookie_fetch_failed',
+      `Failed to resolve storage state for region=${params.target.regionKey}: ${toErrorText(error)}`,
+    );
+  }
 
-  return { browser, context, page };
+  if (typeof storageState === 'string' && !existsSync(storageState)) {
+    throw new XTrendCrawlerError(
+      'cookie_fetch_failed',
+      `Storage state file not found for region=${params.target.regionKey}: ${storageState}`,
+    );
+  }
+
+  let browser: Browser;
+  try {
+    browser = await chromium.launch(getBrowserLaunchOptions(params.target, params.headless));
+  } catch (error) {
+    throw new XTrendCrawlerError(
+      'browser_launch_failed',
+      `Failed to launch browser for region=${params.target.regionKey}: ${toErrorText(error)}`,
+    );
+  }
+
+  try {
+    const context = await browser.newContext({
+      locale: params.target.locale?.trim() || DEFAULT_LOCALE,
+      storageState,
+      viewport: { width: 1440, height: 1600 },
+      userAgent: DEFAULT_USER_AGENT,
+    });
+    const page = await context.newPage();
+
+    return { browser, context, page };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    const message = toErrorText(error);
+    throw new XTrendCrawlerError(
+      /storage state/i.test(message) ? 'cookie_fetch_failed' : 'session_setup_failed',
+      `Failed to create browser session for region=${params.target.regionKey}: ${message}`,
+    );
+  }
 }
 
 function getPostActionSettleMs(waitAfterLoadMs: number) {
@@ -462,7 +533,7 @@ async function switchRegionViaApi(
   waitAfterLoadMs: number,
 ) {
   if (!target.placeId) {
-    throw new Error(`Missing placeId for region=${target.regionKey}`);
+    throw new XTrendCrawlerError('region_switch_api_failed', `Missing placeId for region=${target.regionKey}`);
   }
 
   const result = await page.evaluate(
@@ -496,7 +567,8 @@ async function switchRegionViaApi(
   );
 
   if (!result.ok) {
-    throw new Error(
+    throw new XTrendCrawlerError(
+      'region_switch_api_failed',
       `set_explore_settings request failed for region=${target.regionKey} status=${result.status} body=${result.body}`,
     );
   }
@@ -509,7 +581,7 @@ async function switchRegionViaApi(
 
 async function switchRegionViaUi(page: Page, target: XTrendTarget, timeoutMs: number, waitAfterLoadMs: number) {
   if (!target.locationSearchQuery || !target.locationSelectText) {
-    throw new Error(`Missing UI location config for region=${target.regionKey}`);
+    throw new XTrendCrawlerError('region_switch_ui_failed', `Missing UI location config for region=${target.regionKey}`);
   }
 
   await page.goto(EXPLORE_LOCATION_URL, {
@@ -547,7 +619,8 @@ async function switchRegionViaUi(page: Page, target: XTrendTarget, timeoutMs: nu
   await locationButton.click({ force: true, timeout: timeoutMs });
   const setLocationResponse = await setLocationPromise;
   if (!setLocationResponse.ok()) {
-    throw new Error(
+    throw new XTrendCrawlerError(
+      'region_switch_ui_failed',
       `set_explore_settings request failed for region=${target.regionKey} status=${setLocationResponse.status()}`,
     );
   }
@@ -600,10 +673,17 @@ async function extractCurrentRegionTrends(params: {
   try {
     networkHits.length = 0;
     const trendSignalPromise = waitForTrendSignals(page, networkHits, timeoutMs, waitAfterLoadMs);
-    await page.goto(target.targetUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: timeoutMs,
-    });
+    try {
+      await page.goto(target.targetUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: timeoutMs,
+      });
+    } catch (error) {
+      throw new XTrendCrawlerError(
+        'trend_navigation_failed',
+        `Failed to open trends page for region=${target.regionKey}: ${toErrorText(error)}`,
+      );
+    }
     await trendSignalPromise;
 
     loggedIn = await isLoggedIn(page);
@@ -626,12 +706,18 @@ async function extractCurrentRegionTrends(params: {
     extractionSource = finalResult?.source ?? null;
 
     if (!finalResult) {
-      throw new Error(`No trend data extracted. loggedIn=${loggedIn} currentUrl=${page.url()}`);
+      throw new XTrendCrawlerError(
+        loggedIn ? 'trend_data_empty' : 'not_logged_in',
+        `No trend data extracted. loggedIn=${loggedIn} currentUrl=${page.url()}`,
+      );
     }
 
     const limitedItems = limitTrendItems(finalResult.trends);
     if (!limitedItems.length) {
-      throw new Error(`No trend data extracted after limiting. loggedIn=${loggedIn} currentUrl=${page.url()}`);
+      throw new XTrendCrawlerError(
+        'trend_data_empty',
+        `No trend data extracted after limiting. loggedIn=${loggedIn} currentUrl=${page.url()}`,
+      );
     }
 
     return {
@@ -642,6 +728,7 @@ async function extractCurrentRegionTrends(params: {
       sourceUrl,
       extractionSource: finalResult.source,
       loggedIn,
+      timingsMs: createEmptyTimings(),
       items: limitedItems,
       rawPayload: finalResult.rawPayload,
     };
@@ -654,6 +741,8 @@ async function extractCurrentRegionTrends(params: {
       sourceUrl,
       extractionSource,
       loggedIn,
+      errorCode: getFailureCode(error, loggedIn ? 'unknown' : 'not_logged_in'),
+      timingsMs: createEmptyTimings(),
       error: toErrorText(error),
     };
   }
@@ -665,6 +754,7 @@ export async function crawlXTrendTargets(params: {
   headless?: boolean;
   timeoutMs?: number;
   waitAfterLoadMs?: number;
+  onRegionComplete?: (result: XTrendRegionResult) => void | Promise<void>;
 }): Promise<XTrendRegionResult[]> {
   const {
     targets,
@@ -672,6 +762,7 @@ export async function crawlXTrendTargets(params: {
     headless = true,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     waitAfterLoadMs = DEFAULT_WAIT_AFTER_LOAD_MS,
+    onRegionComplete,
   } = params;
 
   if (!targets.length) {
@@ -710,13 +801,29 @@ export async function crawlXTrendTargets(params: {
       }
     });
 
-    await ensureManualLocationMode(page, timeoutMs, waitAfterLoadMs);
+    try {
+      await ensureManualLocationMode(page, timeoutMs, waitAfterLoadMs);
+    } catch (error) {
+      throw new XTrendCrawlerError(
+        'session_setup_failed',
+        `Failed to prepare explore settings for region=${targets[0]?.regionKey ?? 'unknown'}: ${toErrorText(error)}`,
+      );
+    }
     const results: XTrendRegionResult[] = [];
 
     for (const target of targets) {
+      const regionStartedAt = Date.now();
+      let switchRegionMs = 0;
+      let extractTrendsMs = 0;
+
       try {
+        const switchStartedAt = Date.now();
         await switchRegion(page, target, apiHeaders, timeoutMs, waitAfterLoadMs);
+        switchRegionMs = Date.now() - switchStartedAt;
+
         collectNetworkHits = true;
+
+        const extractStartedAt = Date.now();
         const result = await extractCurrentRegionTrends({
           page,
           target,
@@ -725,9 +832,12 @@ export async function crawlXTrendTargets(params: {
           waitAfterLoadMs,
           networkHits,
         });
+        extractTrendsMs = Date.now() - extractStartedAt;
+        result.timingsMs = buildTimings(regionStartedAt, switchRegionMs, extractTrendsMs);
         results.push(result);
+        await onRegionComplete?.(result);
       } catch (error) {
-        results.push({
+        const failureResult: XTrendRegionResult = {
           status: 'failed',
           snapshotHour,
           regionKey: target.regionKey,
@@ -735,8 +845,12 @@ export async function crawlXTrendTargets(params: {
           sourceUrl: page.url(),
           extractionSource: null,
           loggedIn: await isLoggedIn(page).catch(() => false),
+          errorCode: getFailureCode(error, 'region_switch_failed'),
+          timingsMs: buildTimings(regionStartedAt, switchRegionMs, extractTrendsMs),
           error: toErrorText(error),
-        });
+        };
+        results.push(failureResult);
+        await onRegionComplete?.(failureResult);
       } finally {
         collectNetworkHits = false;
         networkHits.length = 0;
@@ -745,7 +859,9 @@ export async function crawlXTrendTargets(params: {
 
     return results;
   } catch (error) {
-    return targets.map((target) => ({
+    const errorCode = getFailureCode(error, 'unknown');
+    const errorText = toErrorText(error);
+    const bootstrapFailures = targets.map((target) => ({
       status: 'failed',
       snapshotHour,
       regionKey: target.regionKey,
@@ -753,8 +869,16 @@ export async function crawlXTrendTargets(params: {
       sourceUrl: target.targetUrl,
       extractionSource: null,
       loggedIn: false,
-      error: toErrorText(error),
-    }));
+      errorCode,
+      timingsMs: createEmptyTimings(),
+      error: `Session bootstrap failed before region=${target.regionKey} crawl started: ${errorText}`,
+    }) satisfies XTrendRegionResult);
+
+    for (const failureResult of bootstrapFailures) {
+      await onRegionComplete?.(failureResult);
+    }
+
+    return bootstrapFailures;
   } finally {
     await context?.close();
     await browser?.close();
@@ -785,6 +909,8 @@ export async function crawlXTrendTarget(params: {
       sourceUrl: params.target.targetUrl,
       extractionSource: null,
       loggedIn: false,
+      errorCode: 'unknown',
+      timingsMs: createEmptyTimings(),
       error: 'No crawl result returned.',
     }
   );

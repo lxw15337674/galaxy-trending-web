@@ -1,5 +1,22 @@
 export type XTrendExtractionSource = 'network' | 'dom';
 export type XTrendCookieSource = 'storage_state_file' | 'admin_api';
+export type XTrendFailureCode =
+  | 'cookie_fetch_failed'
+  | 'browser_launch_failed'
+  | 'session_setup_failed'
+  | 'region_switch_api_failed'
+  | 'region_switch_ui_failed'
+  | 'region_switch_failed'
+  | 'trend_navigation_failed'
+  | 'trend_data_empty'
+  | 'not_logged_in'
+  | 'unknown';
+
+export interface XTrendRegionTimings {
+  switchRegionMs: number;
+  extractTrendsMs: number;
+  totalMs: number;
+}
 
 export interface XTrendTarget {
   regionKey: string;
@@ -35,6 +52,7 @@ export interface XTrendRegionSuccess {
   sourceUrl: string;
   extractionSource: XTrendExtractionSource;
   loggedIn: boolean;
+  timingsMs: XTrendRegionTimings;
   items: XTrendItem[];
   rawPayload: unknown;
 }
@@ -47,6 +65,8 @@ export interface XTrendRegionFailure {
   sourceUrl: string;
   extractionSource: XTrendExtractionSource | null;
   loggedIn: boolean;
+  errorCode: XTrendFailureCode;
+  timingsMs: XTrendRegionTimings;
   error: string;
   rawPayload?: unknown;
 }

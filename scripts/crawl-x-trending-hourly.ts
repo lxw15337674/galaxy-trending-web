@@ -94,32 +94,38 @@ function filterTargets(targets: XTrendTarget[], regionKeys: string[] | null) {
   return targets.filter((target) => allowed.has(target.regionKey));
 }
 
+function formatTimings(result: XTrendRegionResult) {
+  return `totalMs=${result.timingsMs.totalMs} switchMs=${result.timingsMs.switchRegionMs} extractMs=${result.timingsMs.extractTrendsMs}`;
+}
+
+function logRegionResult(result: XTrendRegionResult) {
+  if (result.status === 'success') {
+    console.log(
+      `  [ok] region=${result.regionKey} source=${result.extractionSource} loggedIn=${result.loggedIn} items=${result.items.length} top=${result.items[0]?.trendName ?? 'N/A'} ${formatTimings(result)}`,
+    );
+    return;
+  }
+
+  console.log(
+    `  [failed] region=${result.regionKey} code=${result.errorCode} source=${result.extractionSource ?? 'n/a'} loggedIn=${result.loggedIn} ${formatTimings(result)} error=${result.error}`,
+  );
+}
+
 async function runTargets(options: CliOptions, targets: XTrendTarget[]) {
   targets.forEach((target) => {
     console.log(`queue region=${target.regionKey} label="${target.regionLabel}" headless=${options.headless}`);
   });
 
-  const results = await crawlXTrendTargets({
+  return crawlXTrendTargets({
     targets,
     snapshotHour: options.snapshotHour,
     headless: options.headless,
     timeoutMs: options.timeoutMs,
     waitAfterLoadMs: options.waitAfterLoadMs,
+    onRegionComplete: (result) => {
+      logRegionResult(result);
+    },
   });
-
-  for (const result of results) {
-    if (result.status === 'success') {
-      console.log(
-        `  [ok] region=${result.regionKey} source=${result.extractionSource} loggedIn=${result.loggedIn} items=${result.items.length} top=${result.items[0]?.trendName ?? 'N/A'}`,
-      );
-    } else {
-      console.log(
-        `  [failed] region=${result.regionKey} source=${result.extractionSource ?? 'n/a'} loggedIn=${result.loggedIn} error=${result.error}`,
-      );
-    }
-  }
-
-  return results;
 }
 
 async function retryFailedIfNeeded(

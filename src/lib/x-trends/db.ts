@@ -300,7 +300,7 @@ export async function saveXTrendHourlyResults(snapshotHour: string, results: XTr
       loggedIn: result.loggedIn,
       status: 'failed',
       itemCount: 0,
-      errorText: result.error.slice(0, 1000),
+      errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
       rawPayload: toJson(result.rawPayload),
     });
     failed += 1;
