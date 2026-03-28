@@ -1,11 +1,22 @@
 import path from 'node:path';
-import { resolveXTrendRegionLabel } from './regions';
+import { resolveXTrendRegionLabel, resolveXTrendRegionLocationConfig } from './regions';
 import { XTrendTarget } from './types';
 
-const DEFAULT_TARGET_REGIONS = [{ regionKey: 'hk' }] as const;
+const DEFAULT_TARGET_REGIONS = [
+  { regionKey: 'us' },
+  { regionKey: 'jp' },
+  { regionKey: 'id' },
+  { regionKey: 'in' },
+  { regionKey: 'gb' },
+  { regionKey: 'de' },
+  { regionKey: 'tr' },
+  { regionKey: 'mx' },
+  { regionKey: 'br' },
+  { regionKey: 'hk' },
+] as const;
 const DEFAULT_TARGET_URL = 'https://x.com/explore/tabs/trending';
-const DEFAULT_COOKIE_SOURCE = 'storage_state_file';
-const DEFAULT_ADMIN_API_BASE_URL = 'https://downloader-api.bhwa233.com';
+const DEFAULT_COOKIE_SOURCE = 'admin_api';
+const DEFAULT_ADMIN_API_BASE_URL = 'https://dev-api.bhwa233.com';
 
 function normalizeCookieSource(value: unknown) {
   return String(value ?? DEFAULT_COOKIE_SOURCE).trim().toLowerCase() === 'admin_api' ? 'admin_api' : 'storage_state_file';
@@ -14,6 +25,8 @@ function normalizeCookieSource(value: unknown) {
 function buildTarget(input: {
   regionKey: string;
   regionLabel?: string | null;
+  locationSearchQuery?: string | null;
+  locationSelectText?: string | null;
   cookieSource?: string | null;
   storageStatePath?: string | null;
   adminApiBaseUrl?: string | null;
@@ -24,6 +37,8 @@ function buildTarget(input: {
 }): XTrendTarget {
   const regionKey = input.regionKey.trim().toLowerCase();
   const explicitRegionLabel = input.regionLabel?.trim() || null;
+  const explicitLocationSearchQuery = input.locationSearchQuery?.trim() || null;
+  const explicitLocationSelectText = input.locationSelectText?.trim() || null;
   const cookieSource = normalizeCookieSource(input.cookieSource);
   const storageStatePath = input.storageStatePath?.trim() || null;
   const adminApiBaseUrl = input.adminApiBaseUrl?.trim() || DEFAULT_ADMIN_API_BASE_URL;
@@ -35,6 +50,14 @@ function buildTarget(input: {
   if (!regionKey) {
     throw new Error('X Trends target is missing regionKey.');
   }
+
+  const resolvedLocationConfig =
+    explicitLocationSearchQuery && explicitLocationSelectText
+      ? {
+          locationSearchQuery: explicitLocationSearchQuery,
+          locationSelectText: explicitLocationSelectText,
+        }
+      : resolveXTrendRegionLocationConfig(regionKey);
 
   if (cookieSource === 'storage_state_file' && !storageStatePath) {
     throw new Error(
@@ -49,6 +72,8 @@ function buildTarget(input: {
   return {
     regionKey,
     regionLabel: resolveXTrendRegionLabel(regionKey, explicitRegionLabel),
+    locationSearchQuery: resolvedLocationConfig.locationSearchQuery,
+    locationSelectText: resolvedLocationConfig.locationSelectText,
     cookieSource,
     storageStatePath: storageStatePath ? path.resolve(storageStatePath) : null,
     adminApiBaseUrl,
@@ -72,6 +97,8 @@ function parseJsonTargets(raw: string): XTrendTarget[] {
     return buildTarget({
       regionKey: String(record.regionKey ?? ''),
       regionLabel: String(record.regionLabel ?? '').trim() || null,
+      locationSearchQuery: String(record.locationSearchQuery ?? '').trim() || null,
+      locationSelectText: String(record.locationSelectText ?? '').trim() || null,
       cookieSource: String(record.cookieSource ?? DEFAULT_COOKIE_SOURCE),
       storageStatePath: String(record.storageStatePath ?? '').trim() || null,
       adminApiBaseUrl: String(record.adminApiBaseUrl ?? DEFAULT_ADMIN_API_BASE_URL).trim() || null,
@@ -114,3 +141,4 @@ export function loadXTrendTargetsFromEnv(): XTrendTarget[] {
 
   return loadDefaultTargetsFromCode();
 }
+

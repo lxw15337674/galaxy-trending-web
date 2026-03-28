@@ -1,5 +1,5 @@
 import { config as loadEnv } from 'dotenv';
-import { crawlXTrendTarget } from '../src/lib/x-trends/crawler';
+import { crawlXTrendTargets } from '../src/lib/x-trends/crawler';
 import { loadXTrendTargetsFromEnv } from '../src/lib/x-trends/targets';
 import { parseSnapshotHour, toSnapshotHour } from '../src/lib/x-trends/time';
 import type { XTrendRegionResult, XTrendTarget } from '../src/lib/x-trends/types';
@@ -95,18 +95,19 @@ function filterTargets(targets: XTrendTarget[], regionKeys: string[] | null) {
 }
 
 async function runTargets(options: CliOptions, targets: XTrendTarget[]) {
-  const results: XTrendRegionResult[] = [];
+  targets.forEach((target) => {
+    console.log(`queue region=${target.regionKey} label="${target.regionLabel}" headless=${options.headless}`);
+  });
 
-  for (const target of targets) {
-    console.log(`crawl region=${target.regionKey} label="${target.regionLabel}" headless=${options.headless}`);
-    const result = await crawlXTrendTarget({
-      target,
-      snapshotHour: options.snapshotHour,
-      headless: options.headless,
-      timeoutMs: options.timeoutMs,
-      waitAfterLoadMs: options.waitAfterLoadMs,
-    });
+  const results = await crawlXTrendTargets({
+    targets,
+    snapshotHour: options.snapshotHour,
+    headless: options.headless,
+    timeoutMs: options.timeoutMs,
+    waitAfterLoadMs: options.waitAfterLoadMs,
+  });
 
+  for (const result of results) {
     if (result.status === 'success') {
       console.log(
         `  [ok] region=${result.regionKey} source=${result.extractionSource} loggedIn=${result.loggedIn} items=${result.items.length} top=${result.items[0]?.trendName ?? 'N/A'}`,
@@ -116,8 +117,6 @@ async function runTargets(options: CliOptions, targets: XTrendTarget[]) {
         `  [failed] region=${result.regionKey} source=${result.extractionSource ?? 'n/a'} loggedIn=${result.loggedIn} error=${result.error}`,
       );
     }
-
-    results.push(result);
   }
 
   return results;

@@ -4,6 +4,8 @@ export type XTrendCookieSource = 'storage_state_file' | 'admin_api';
 export interface XTrendTarget {
   regionKey: string;
   regionLabel: string;
+  locationSearchQuery: string;
+  locationSelectText: string;
   targetUrl: string;
   cookieSource: XTrendCookieSource;
   storageStatePath?: string | null;

@@ -4,7 +4,7 @@ YouTube-only trending site with:
 
 - YouTube 视频榜（每 2 小时抓取，按地区）
 - YouTube 直播榜（定时抓取，全局前 N）
-- X Trends（按小时抓取，当前默认地区列表在代码中维护，现为 `hk`，同时保留 `X_TREND_TARGETS_JSON` 作为后续多地区串行扩展入口）
+- X Trends（按小时抓取，默认按代码内维护的前 10 活跃地区串行抓取，同时保留 `X_TREND_TARGETS_JSON` 作为后续自定义多地区入口）
 
 ## Tech Stack
 
@@ -25,8 +25,9 @@ Required:
 For the current default X Trends crawler:
 
 - default targets are stored in code as data
-- current default target list is `['hk']`
-- region labels are resolved from the built-in region map
+- current default target list is `['us', 'jp', 'id', 'in', 'gb', 'de', 'tr', 'mx', 'br', 'hk']`
+- region labels and UI location selectors are resolved from the built-in region map
+- crawler uses a single browser context and switches X Explore location serially
 
 X Trends cookie source selection:
 
@@ -40,7 +41,7 @@ If `X_TREND_COOKIE_SOURCE=storage_state_file`:
 
 If `X_TREND_COOKIE_SOURCE=admin_api`:
 
-- `X_TREND_ADMIN_API_BASE_URL` (default: `https://downloader-api.bhwa233.com`)
+- `X_TREND_ADMIN_API_BASE_URL` (default: `https://dev-api.bhwa233.com`)
 - `X_TREND_ADMIN_API_KEY`
 
 Other optional X Trends variables:
@@ -50,10 +51,12 @@ Other optional X Trends variables:
 - `X_TREND_LOCALE`
 - `X_TREND_TARGETS_JSON`
 
-`X_TREND_TARGETS_JSON` can be used later for multi-region serial crawling. Each item supports:
+`X_TREND_TARGETS_JSON` can be used for custom multi-region serial crawling. Each item supports:
 
 - `regionKey`
 - `regionLabel` (optional override)
+- `locationSearchQuery` (optional override)
+- `locationSelectText` (optional override)
 - `cookieSource`
 - `storageStatePath`
 - `adminApiBaseUrl`
@@ -78,6 +81,8 @@ Built-in region labels currently include:
 - `br` -> `Brazil`
 - `in` -> `India`
 - `id` -> `Indonesia`
+- `mx` -> `Mexico`
+- `sa` -> `Saudi Arabia`
 - `th` -> `Thailand`
 - `my` -> `Malaysia`
 - `ph` -> `Philippines`
@@ -113,7 +118,7 @@ pnpm crawl:youtube:live -- --dry-run
 
 pnpm crawl:x:trending
 pnpm crawl:x:trending -- --dry-run
-pnpm crawl:x:trending -- --hour="2026-03-28 11:00:00" --regions=hk
+pnpm crawl:x:trending -- --hour="2026-03-28 11:00:00" --regions=us,jp
 pnpm db:ensure:x:trends
 ```
 
@@ -153,3 +158,4 @@ Required repository secrets:
 - `TURSO_AUTH_TOKEN`
 - `YOUTUBE_API_KEY_DAILY`
 - `YOUTUBE_API_KEY_LIVE`
+
