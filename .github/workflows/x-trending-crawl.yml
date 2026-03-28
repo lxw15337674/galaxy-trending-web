@@ -1,0 +1,50 @@
+name: X Trending Crawl
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: x-trending-crawl-hourly
+  cancel-in-progress: false
+
+jobs:
+  crawl-x-trending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Asia/Shanghai
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      X_TREND_REGION_KEY: ${{ secrets.X_TREND_REGION_KEY }}
+      X_TREND_COOKIE_SOURCE: admin_api
+      X_TREND_ADMIN_API_BASE_URL: ${{ secrets.X_TREND_ADMIN_API_BASE_URL }}
+      X_TREND_ADMIN_API_KEY: ${{ secrets.X_TREND_ADMIN_API_KEY }}
+      X_TREND_LOCALE: ${{ secrets.X_TREND_LOCALE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure X trends schema
+        run: pnpm db:ensure:x:trends
+
+      - name: Crawl X trends hourly
+        run: pnpm crawl:x:trending -- --no-retry --timeout-ms=60000
