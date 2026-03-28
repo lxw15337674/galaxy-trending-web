@@ -1,11 +1,22 @@
-import { chromium, type Page, type Response } from 'playwright-core';
+import { existsSync } from 'node:fs';
+import { chromium, type LaunchOptions, type Page, type Response } from 'playwright-core';
 import { resolveXTrendStorageState } from './cookie-provider';
 import { XTrendRegionResult, XTrendTarget, type XTrendExtractionSource, type XTrendItem } from './types';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_WAIT_AFTER_LOAD_MS = 5_000;
-const DEFAULT_BROWSER_EXECUTABLE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const DEFAULT_WINDOWS_BROWSER_EXECUTABLE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const DEFAULT_LOCALE = 'zh-CN';
+const DEFAULT_DARWIN_BROWSER_EXECUTABLE_PATHS = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+];
+const DEFAULT_LINUX_BROWSER_EXECUTABLE_PATHS = [
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+];
 
 interface ExtractedResult {
   pageUrl: string;
@@ -285,6 +296,22 @@ function toErrorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function resolveBrowserExecutablePath(target: XTrendTarget) {
+  const explicitPath = target.browserExecutablePath?.trim();
+  if (explicitPath) {
+    return explicitPath;
+  }
+
+  const candidatePaths =
+    process.platform === 'win32'
+      ? [DEFAULT_WINDOWS_BROWSER_EXECUTABLE_PATH]
+      : process.platform === 'darwin'
+        ? DEFAULT_DARWIN_BROWSER_EXECUTABLE_PATHS
+        : DEFAULT_LINUX_BROWSER_EXECUTABLE_PATHS;
+
+  return candidatePaths.find((candidatePath) => existsSync(candidatePath));
+}
+
 export async function crawlXTrendTarget(params: {
   target: XTrendTarget;
   snapshotHour: string;
@@ -306,11 +333,17 @@ export async function crawlXTrendTarget(params: {
 
   try {
     const storageState = await resolveXTrendStorageState(target);
-    const browser = await chromium.launch({
-      executablePath: target.browserExecutablePath?.trim() || DEFAULT_BROWSER_EXECUTABLE_PATH,
+    const executablePath = resolveBrowserExecutablePath(target);
+    const launchOptions: LaunchOptions = {
       headless,
       args: ['--disable-blink-features=AutomationControlled'],
-    });
+    };
+
+    if (executablePath) {
+      launchOptions.executablePath = executablePath;
+    }
+
+    const browser = await chromium.launch(launchOptions);
 
     try {
       const context = await browser.newContext({
