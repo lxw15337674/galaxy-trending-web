@@ -45,5 +45,18 @@ jobs:
       - name: Ensure X trends schema
         run: pnpm db:ensure:x:trends
 
+      - name: Debug X admin API config
+        run: |
+          node -e "const expectedOrigin = 'https://dev-api.bhwa233.com'; const raw = process.env.X_TREND_ADMIN_API_BASE_URL || ''; let originMatchesExpected = false; try { originMatchesExpected = new URL(raw).origin === expectedOrigin; } catch {} console.log(`X_TREND_ADMIN_API_BASE_URL present=${Boolean(raw.trim())}`); console.log(`X_TREND_ADMIN_API_BASE_URL origin_matches_expected=${originMatchesExpected}`); console.log(`X_TREND_ADMIN_API_KEY present=${Boolean((process.env.X_TREND_ADMIN_API_KEY || '').trim())}`);"
+
+      - name: Probe X admin API
+        run: |
+          status="$(curl -sS -o "$BODY_FILE" -w "%{http_code}" -H "x-api-key: $X_TREND_ADMIN_API_KEY" "$X_TREND_ADMIN_API_BASE_URL/api/admin/gist-cookie?website=x.com")"
+          body_kind="$(python3 -c "from pathlib import Path; import os; text = Path(os.environ['BODY_FILE']).read_text(encoding='utf-8', errors='replace'); print('json' if text.lstrip().startswith('{') else 'html' if '<html' in text.lower() else 'other')" )"
+          echo "admin_api_probe status=$status body_kind=$body_kind"
+          rm -f "$BODY_FILE"
+        env:
+          BODY_FILE: ${{ runner.temp }}/x-admin-api-probe-body.txt
+
       - name: Crawl X trends hourly
         run: pnpm crawl:x:trending -- --no-retry --timeout-ms=60000

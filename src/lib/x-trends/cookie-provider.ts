@@ -1,3 +1,4 @@
+import axios from 'axios';
 import type { BrowserContextOptions } from 'playwright-core';
 import type { XTrendTarget } from './types';
 
@@ -8,8 +9,6 @@ type StorageStateCookie = InMemoryStorageState['cookies'][number];
 const FIXED_X_COOKIE_WEBSITE = 'x.com';
 const ADMIN_API_MAX_RETRIES = 5;
 const ADMIN_API_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const ADMIN_API_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
 interface RawCookieRecord {
   name?: unknown;
@@ -228,21 +227,20 @@ async function fetchAdminApiCookieConfig(target: XTrendTarget) {
 
   for (let attempt = 1; attempt <= ADMIN_API_MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(url, {
+      const response = await axios.get(url.toString(), {
         headers: {
-          Accept: 'application/json',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'User-Agent': ADMIN_API_USER_AGENT,
           'x-api-key': apiKey,
         },
+        responseType: 'text',
+        timeout: 30_000,
+        transformResponse: [(value) => value],
+        validateStatus: () => true,
       });
 
-      const rawText = await response.text();
+      const rawText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
       const parsedPayload = rawText ? (parseJsonString(rawText) as AdminApiSuccessPayload | null) : null;
 
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         lastError = buildAdminApiError({
           status: response.status,
           payload: parsedPayload,
