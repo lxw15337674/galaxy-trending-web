@@ -47,7 +47,30 @@ jobs:
 
       - name: Debug X admin API config
         run: |
-          node -e "const expectedOrigin = 'https://dev-api.bhwa233.com'; const raw = process.env.X_TREND_ADMIN_API_BASE_URL || ''; let originMatchesExpected = false; try { originMatchesExpected = new URL(raw).origin === expectedOrigin; } catch {} console.log(`X_TREND_ADMIN_API_BASE_URL present=${Boolean(raw.trim())}`); console.log(`X_TREND_ADMIN_API_BASE_URL origin_matches_expected=${originMatchesExpected}`); console.log(`X_TREND_ADMIN_API_KEY present=${Boolean((process.env.X_TREND_ADMIN_API_KEY || '').trim())}`);"
+          node <<'NODE'
+          const expectedOrigin = 'https://dev-api.bhwa233.com';
+          const raw = (process.env.X_TREND_ADMIN_API_BASE_URL || '').trim();
+          let origin = 'invalid_or_missing';
+          let host = 'invalid_or_missing';
+          let originMatchesExpected = false;
+
+          if (raw) {
+            try {
+              const parsed = new URL(raw);
+              origin = parsed.origin;
+              host = parsed.host;
+              originMatchesExpected = parsed.origin === expectedOrigin;
+            } catch {
+              // Keep invalid_or_missing markers.
+            }
+          }
+
+          console.log(`X_TREND_ADMIN_API_BASE_URL present=${Boolean(raw)}`);
+          console.log(`X_TREND_ADMIN_API_BASE_URL host=${host}`);
+          console.log(`X_TREND_ADMIN_API_BASE_URL origin=${origin}`);
+          console.log(`X_TREND_ADMIN_API_BASE_URL origin_matches_expected=${originMatchesExpected}`);
+          console.log(`X_TREND_ADMIN_API_KEY present=${Boolean((process.env.X_TREND_ADMIN_API_KEY || '').trim())}`);
+          NODE
 
       - name: Probe X admin API
         run: |
