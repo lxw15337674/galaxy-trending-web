@@ -11,6 +11,7 @@ import type {
   TikTokHashtagTargetResult,
   TikTokHashtagTrendPoint,
 } from './types';
+import { buildTikTokPublicTagUrl } from './types';
 
 interface BatchIdRow {
   id: number;
@@ -490,6 +491,7 @@ export async function queryLatestTikTokHashtags(countryCode: string): Promise<Ti
       rankDiffType: toNullableNumber(row.rankDiffType),
       industryName: row.industryName,
       detailPageUrl: row.detailPageUrl,
+      publicTagUrl: buildTikTokPublicTagUrl(row.hashtagName),
       trendPoints: parseTrendPoints(row.trendPointsJson),
       creatorPreview: parseCreatorPreview(row.creatorPreviewJson),
       detail: parseDetail(row.detailJson),

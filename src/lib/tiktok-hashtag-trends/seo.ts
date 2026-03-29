@@ -59,7 +59,7 @@ export function buildTikTokTrendJsonLd(
     '@type': 'ListItem',
     position: index + 1,
     name: `#${item.hashtagName}`,
-    url: item.detailPageUrl,
+    url: item.publicTagUrl,
   }));
 
   return {

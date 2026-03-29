@@ -77,6 +77,11 @@ export interface TikTokHashtagItem {
   detail?: TikTokHashtagDetail;
 }
 
+export function buildTikTokPublicTagUrl(hashtagName: string) {
+  const normalized = hashtagName.trim().replace(/^#+/, '');
+  return `https://www.tiktok.com/tag/${encodeURIComponent(normalized)}`;
+}
+
 export interface TikTokHashtagTargetSuccess {
   status: 'success';
   snapshotHour: string;
@@ -133,6 +138,7 @@ export interface TikTokHashtagQueryItem {
   rankDiffType: number | null;
   industryName: string | null;
   detailPageUrl: string;
+  publicTagUrl: string;
   trendPoints: TikTokHashtagTrendPoint[];
   creatorPreview: TikTokHashtagCreatorPreview[];
   detail: TikTokHashtagDetail | null;

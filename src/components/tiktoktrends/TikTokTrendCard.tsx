@@ -83,7 +83,7 @@ export function TikTokTrendCard({ item, locale }: TikTokTrendCardProps) {
           </div>
           <div className="min-w-0">
             <a
-              href={item.detailPageUrl}
+              href={item.publicTagUrl}
               target="_blank"
               rel="noreferrer"
               className="line-clamp-2 text-lg font-semibold tracking-tight text-zinc-950 transition group-hover:text-rose-700 dark:text-zinc-50 dark:group-hover:text-rose-300"
