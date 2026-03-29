@@ -3,6 +3,7 @@
 YouTube-only trending site with:
 
 - YouTube 视频榜（每 2 小时抓取，按地区）
+- YouTube Music 热门歌曲周榜（官方 Weekly Top Songs，支持 Global 与国家榜）
 - YouTube 直播榜（定时抓取，全局前 N）
 - X Trends（按小时抓取，默认按代码内维护的前 20 活跃地区串行抓取，同时保留 `X_TREND_TARGETS_JSON` 作为后续自定义多地区入口）
 
@@ -49,6 +50,22 @@ Other optional X Trends variables:
 - `X_TREND_BROWSER_EXECUTABLE_PATH`
 - `X_TREND_LOCALE`
 - `X_TREND_TARGETS_JSON`
+
+For TikTok Hashtag Trends crawler:
+
+- default targets are stored in code as `US / GB / JP / ID`
+- current crawler uses TikTok Creative Center hashtag list API from a browser page context
+- current default period is `7` days
+
+Optional TikTok Hashtag Trends variables:
+
+- `TIKTOK_TREND_TARGETS_JSON`
+- `TIKTOK_TREND_LOCALE`
+- `TIKTOK_TREND_PERIOD`
+- `TIKTOK_TREND_INDUSTRY_IDS`
+- `TIKTOK_TREND_KEYWORD`
+- `TIKTOK_TREND_FILTER_BY`
+- `TIKTOK_TREND_BROWSER_EXECUTABLE_PATH`
 
 `X_TREND_TARGETS_JSON` can be used for custom multi-region serial crawling. Each item supports:
 
@@ -108,6 +125,10 @@ pnpm crawl:youtube:trending
 pnpm crawl:youtube:trending -- --max-results=100
 pnpm crawl:youtube:trending -- --dry-run
 
+pnpm crawl:youtube:music:weekly
+pnpm crawl:youtube:music:weekly -- --countries=global,US,JP
+pnpm crawl:youtube:music:weekly -- --dry-run
+
 pnpm crawl:youtube:live
 pnpm crawl:youtube:live -- --max-results=200 --search-pages=4 --retention-days=30 --query=live
 pnpm crawl:youtube:live -- --dry-run
@@ -116,6 +137,10 @@ pnpm crawl:x:trending
 pnpm crawl:x:trending -- --dry-run
 pnpm crawl:x:trending -- --hour="2026-03-28 11:00:00" --regions=us,jp
 pnpm db:ensure:x:trends
+
+pnpm spike:tiktok:hashtag
+pnpm crawl:tiktok:hashtag -- --countries=US,JP --detail-limit=0 --json-only
+pnpm crawl:tiktok:hashtag -- --countries=US --detail-limit=2
 ```
 
 Example local debug flow for X Trends:
@@ -143,6 +168,7 @@ For CI / GitHub Actions, use `admin_api` mode. The crawler will request the fixe
 ## GitHub Actions
 
 - `.github/workflows/youtube-trending-crawl.yml`
+- `.github/workflows/youtube-music-weekly-crawl.yml`
 - `.github/workflows/youtube-live-crawl.yml`
 - `.github/workflows/x-trending-crawl.yml`
 

@@ -39,6 +39,12 @@ const MEDIA_CLASS = 'relative block aspect-video w-full overflow-hidden rounded-
 const HEADER_CLASS = 'flex flex-col  p-1 ';
 const CONTENT_CLASS = 'mt-auto flex flex-col gap-2 p-0 pt-0';
 
+function getAvatarFallbackText(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return '?';
+  return normalized.slice(0, 1).toUpperCase();
+}
+
 export function YouTubeVideoCard(props: YouTubeVideoCardProps) {
   if (props.loading) {
     const tagsCount = props.tagsCount ?? 4;
@@ -108,7 +114,11 @@ export function YouTubeVideoCard(props: YouTubeVideoCardProps) {
           >
             {props.channelAvatarUrl ? (
               <Image src={props.channelAvatarUrl} alt={props.channelTitle} fill sizes="32px" className="object-cover" />
-            ) : null}
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-600 dark:text-zinc-200">
+                {getAvatarFallbackText(props.channelTitle)}
+              </span>
+            )}
           </a>
           <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
             <div className="min-w-0 flex-1">

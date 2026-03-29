@@ -8,6 +8,20 @@
       "when": 1774670186017,
       "tag": "0000_even_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1774776452316,
+      "tag": "0001_dark_winter_soldier",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774780060686,
+      "tag": "0002_worthless_wind_dancer",
+      "breakpoints": true
     }
   ]
 }

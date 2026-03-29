@@ -32,7 +32,14 @@ const SHELL_CONTAINER_CLASS = 'mx-auto flex h-14 w-full items-center px-4 md:px-
 const GITHUB_REPO_URL = 'https://github.com/lxw15337674/galaxy-trending-web';
 
 function isLocaleSwitchablePath(barePath: string) {
-  return barePath === '/youtube-trending' || barePath === '/youtube-live' || barePath === '/x-trending';
+  return (
+    barePath === '/youtube-trending' ||
+    barePath.startsWith('/youtube-music') ||
+    barePath === '/youtube-live' ||
+    barePath === '/x-trending' ||
+    barePath === '/tiktok-trending' ||
+    barePath === '/tiktok-videos'
+  );
 }
 
 function SiteHeaderFrame({
@@ -54,6 +61,11 @@ function SiteHeaderFrame({
       mobileLabel: messages.common.navYouTubeHotShort,
     },
     {
+      href: withLocalePrefix('/youtube-music', locale),
+      label: messages.common.navYouTubeMusic,
+      mobileLabel: messages.common.navYouTubeMusicShort,
+    },
+    {
       href: withLocalePrefix('/youtube-live', locale),
       label: messages.common.navYouTubeLive,
       mobileLabel: messages.common.navYouTubeLiveShort,
@@ -62,6 +74,16 @@ function SiteHeaderFrame({
       href: withLocalePrefix('/x-trending', locale),
       label: messages.common.navXTrends,
       mobileLabel: messages.common.navXTrendsShort,
+    },
+    {
+      href: withLocalePrefix('/tiktok-trending', locale),
+      label: messages.common.navTikTokTrends,
+      mobileLabel: messages.common.navTikTokTrendsShort,
+    },
+    {
+      href: withLocalePrefix('/tiktok-videos', locale),
+      label: messages.common.navTikTokVideos,
+      mobileLabel: messages.common.navTikTokVideosShort,
     },
   ];
 

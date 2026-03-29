@@ -68,6 +68,24 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       description: messages.home.trendingDescription,
     },
     {
+      href: `/${locale}/youtube-music`,
+      platform: 'YouTube Music',
+      label: messages.common.navYouTubeMusic,
+      description: messages.home.musicDescription,
+    },
+    {
+      href: `/${locale}/youtube-music/videos-daily`,
+      platform: 'YouTube Music',
+      label: messages.youtubeMusicVideosDaily.title,
+      description: messages.home.musicVideosDailyDescription,
+    },
+    {
+      href: `/${locale}/youtube-music/shorts-songs-daily`,
+      platform: 'YouTube Music',
+      label: messages.youtubeMusicShortsDaily.title,
+      description: messages.home.musicShortsDailyDescription,
+    },
+    {
       href: `/${locale}/youtube-live`,
       platform: 'YouTube',
       label: messages.common.navYouTubeLive,
@@ -78,6 +96,18 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       platform: 'X',
       label: messages.common.navXTrends,
       description: messages.home.xTrendsDescription,
+    },
+    {
+      href: `/${locale}/tiktok-trending`,
+      platform: 'TikTok',
+      label: messages.common.navTikTokTrends,
+      description: messages.home.tiktokDescription,
+    },
+    {
+      href: `/${locale}/tiktok-videos`,
+      platform: 'TikTok',
+      label: messages.common.navTikTokVideos,
+      description: messages.home.tiktokVideosDescription,
     },
   ];
 
@@ -94,7 +124,7 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {sections.map((section) => (
             <Link
               key={section.href}
