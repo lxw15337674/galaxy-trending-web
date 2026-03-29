@@ -36,6 +36,7 @@ const DEFAULT_LINUX_BROWSER_EXECUTABLE_PATHS = [
   '/usr/bin/chromium-browser',
   '/usr/bin/chromium',
 ];
+const PROMOTED_TEXT_RE = /\b(promoted|sponsored)\b|广告|廣告|推广|推廣/i;
 
 interface ExtractedResult {
   pageUrl: string;
@@ -161,6 +162,47 @@ function getTrendMeta(raw: unknown): string | null {
   );
 }
 
+function isPromotedTrend(raw: unknown) {
+  if (!raw || typeof raw !== 'object') return false;
+  const record = raw as Record<string, unknown>;
+
+  if ('promoted_metadata' in record || 'promotedMetadata' in record) {
+    return true;
+  }
+
+  const directStrings = [
+    getString(record.entryId),
+    getString(record.entryType),
+    getString(record.itemType),
+    getString(record.displayType),
+    getString(record.element),
+  ].filter((value): value is string => Boolean(value));
+
+  if (directStrings.some((value) => /promoted/i.test(value))) {
+    return true;
+  }
+
+  const promotedClientEvent = findValueDeep(raw, (candidate): candidate is Record<string, unknown> => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+    const element = getString((candidate as Record<string, unknown>).element);
+    return typeof element === 'string' && /promoted/i.test(element);
+  });
+  if (promotedClientEvent) {
+    return true;
+  }
+
+  const metaText = [
+    getString(record.metaDescription),
+    getString(record.description),
+    getString(record.context),
+    getString(record.localizedContext),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ');
+
+  return PROMOTED_TEXT_RE.test(metaText);
+}
+
 function getTweetVolume(raw: unknown): number | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
@@ -233,6 +275,8 @@ function collectTrendObjects(root: unknown) {
 
 function toTrendItems(rawItems: unknown[]): XTrendItem[] {
   const mapped: Array<XTrendItem | null> = rawItems.map((raw, index) => {
+    if (isPromotedTrend(raw)) return null;
+
     const trendName = getTrendName(raw);
     if (!trendName) return null;
     const queryText = getTrendQuery(raw);
