@@ -33,10 +33,10 @@ export default [
       ...reactHooksPlugin.configs.recommended.rules,
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,
-      '@typescript-eslint/no-empty-object-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      'react/no-unknown-property': 'off',
-      'react/prop-types': 'off',
+      // '@typescript-eslint/no-empty-object-type': 'off',
+      // '@typescript-eslint/no-explicit-any': 'off',
+      // 'react/no-unknown-property': 'off',
+      // 'react/prop-types': 'off',
     },
     settings: {
       react: {

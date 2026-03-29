@@ -5,7 +5,7 @@ import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 import type { YouTubeMusicDailyVideoItem } from './types';
 
-const METADATA_COPY: Record<Locale, { title: string; description: string; keywords: string[] }> = {
+const METADATA_TEXT: Record<Locale, { title: string; description: string; keywords: string[] }> = {
   en: {
     title: 'YouTube Music Daily Top Videos',
     description: 'Latest official YouTube Music daily top videos chart from charts.youtube.com.',
@@ -28,22 +28,22 @@ const METADATA_COPY: Record<Locale, { title: string; description: string; keywor
   },
 };
 
-function resolveMetadataCopy(locale: Locale) {
+function resolveMetadataText(locale: Locale) {
   return {
-    ...METADATA_COPY[locale],
+    ...METADATA_TEXT[locale],
     canonicalPath: `/${locale}/youtube-music/videos-daily`,
     inLanguage: getIntlLocale(locale),
   };
 }
 
 export function buildYouTubeMusicDailyVideosMetadata(locale: Locale): Metadata {
-  const copy = resolveMetadataCopy(locale);
-  const absoluteCanonical = toAbsoluteUrl(copy.canonicalPath);
+  const t = resolveMetadataText(locale);
+  const absoluteCanonical = toAbsoluteUrl(t.canonicalPath);
 
   return {
-    title: copy.title,
-    description: copy.description,
-    keywords: copy.keywords,
+    title: t.title,
+    description: t.description,
+    keywords: t.keywords,
     alternates: {
       canonical: absoluteCanonical,
       languages: buildLocaleAlternates('/youtube-music/videos-daily'),
@@ -51,15 +51,15 @@ export function buildYouTubeMusicDailyVideosMetadata(locale: Locale): Metadata {
     openGraph: {
       type: 'website',
       url: absoluteCanonical,
-      title: copy.title,
-      description: copy.description,
-      locale: copy.inLanguage,
+      title: t.title,
+      description: t.description,
+      locale: t.inLanguage,
       siteName: 'Galaxy Trending',
     },
     twitter: {
       card: 'summary_large_image',
-      title: copy.title,
-      description: copy.description,
+      title: t.title,
+      description: t.description,
     },
     robots: {
       index: true,
@@ -69,25 +69,25 @@ export function buildYouTubeMusicDailyVideosMetadata(locale: Locale): Metadata {
 }
 
 export function buildYouTubeMusicDailyVideosJsonLd(locale: Locale, items: YouTubeMusicDailyVideoItem[]) {
-  const copy = resolveMetadataCopy(locale);
+  const t = resolveMetadataText(locale);
   const itemListElement = items.slice(0, 10).map((item, index) => ({
     '@type': 'ListItem',
     position: index + 1,
     name: item.videoTitle,
-    url: item.youtubeUrl ?? toAbsoluteUrl(copy.canonicalPath),
+    url: item.youtubeUrl ?? toAbsoluteUrl(t.canonicalPath),
   }));
 
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: copy.title,
-    description: copy.description,
-    url: toAbsoluteUrl(copy.canonicalPath),
-    inLanguage: copy.inLanguage,
-    about: copy.keywords,
+    name: t.title,
+    description: t.description,
+    url: toAbsoluteUrl(t.canonicalPath),
+    inLanguage: t.inLanguage,
+    about: t.keywords,
     mainEntity: {
       '@type': 'ItemList',
-      name: copy.title,
+      name: t.title,
       itemListOrder: 'https://schema.org/ItemListOrderAscending',
       numberOfItems: itemListElement.length,
       itemListElement,

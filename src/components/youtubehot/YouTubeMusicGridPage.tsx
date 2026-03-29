@@ -49,7 +49,7 @@ export function YouTubeMusicGridPage({
   return (
     <YouTubeMusicChartScaffold
       locale={locale}
-      copy={t}
+      t={t}
       country={country}
       countries={countries}
       fetchedAt={fetchedAt}

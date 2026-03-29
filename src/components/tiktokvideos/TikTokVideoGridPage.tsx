@@ -80,7 +80,9 @@ function buildSortOptions(
 }
 
 export function TikTokVideoGridPage({ initialData, userCountry }: TikTokVideoGridPageProps) {
-  const t = getMessages(initialData.locale).tiktokVideos;
+  const messages = getMessages(initialData.locale);
+  const common = messages.common;
+  const t = messages.tiktokVideos;
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -88,7 +90,10 @@ export function TikTokVideoGridPage({ initialData, userCountry }: TikTokVideoGri
   const regionDisplayNames = createRegionDisplayNames(initialData.locale);
   const countryOptions = buildCountryOptions(initialData.countries, userCountry, initialData.locale);
   const periodOptions = useMemo(() => buildPeriodOptions(initialData.scopes, t), [initialData.scopes, t]);
-  const sortOptions = useMemo(() => buildSortOptions(initialData.scopes, initialData.period, t), [initialData.period, initialData.scopes, t]);
+  const sortOptions = useMemo(
+    () => buildSortOptions(initialData.scopes, initialData.period, t),
+    [initialData.period, initialData.scopes, t],
+  );
   const localizedCountryName = getLocalizedYouTubeRegionLabel(
     initialData.focusCountry,
     initialData.countryName ?? initialData.focusCountry,
@@ -134,7 +139,7 @@ export function TikTokVideoGridPage({ initialData, userCountry }: TikTokVideoGri
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
           <div className="text-xs font-semibold uppercase tracking-[0.24em] text-rose-600 dark:text-rose-300">
-            TikTok Creative Center
+            {common.tiktokCreativeCenter}
           </div>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-3xl">
             {t.title}

@@ -53,37 +53,38 @@ function SiteHeaderFrame({
 }) {
   const { setTheme } = useTheme();
   const messages = getMessages(locale);
+  const t = messages.common;
   const barePath = stripLocalePrefix(pathname ?? '/');
   const siteNav = [
     {
       href: withLocalePrefix('/youtube-trending', locale),
-      label: messages.common.navYouTubeHot,
-      mobileLabel: messages.common.navYouTubeHotShort,
+      label: t.navYouTubeHot,
+      mobileLabel: t.navYouTubeHotShort,
     },
     {
       href: withLocalePrefix('/youtube-music', locale),
-      label: messages.common.navYouTubeMusic,
-      mobileLabel: messages.common.navYouTubeMusicShort,
+      label: t.navYouTubeMusic,
+      mobileLabel: t.navYouTubeMusicShort,
     },
     {
       href: withLocalePrefix('/youtube-live', locale),
-      label: messages.common.navYouTubeLive,
-      mobileLabel: messages.common.navYouTubeLiveShort,
+      label: t.navYouTubeLive,
+      mobileLabel: t.navYouTubeLiveShort,
     },
     {
       href: withLocalePrefix('/x-trending', locale),
-      label: messages.common.navXTrends,
-      mobileLabel: messages.common.navXTrendsShort,
+      label: t.navXTrends,
+      mobileLabel: t.navXTrendsShort,
     },
     {
       href: withLocalePrefix('/tiktok-trending', locale),
-      label: messages.common.navTikTokTrends,
-      mobileLabel: messages.common.navTikTokTrendsShort,
+      label: t.navTikTokTrends,
+      mobileLabel: t.navTikTokTrendsShort,
     },
     {
       href: withLocalePrefix('/tiktok-videos', locale),
-      label: messages.common.navTikTokVideos,
-      mobileLabel: messages.common.navTikTokVideosShort,
+      label: t.navTikTokVideos,
+      mobileLabel: t.navTikTokVideosShort,
     },
   ];
 
@@ -116,7 +117,7 @@ function SiteHeaderFrame({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-36">
-              <DropdownMenuLabel>Trending</DropdownMenuLabel>
+              <DropdownMenuLabel>{t.menuTrending}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 {siteNav.map((item) => {
@@ -168,7 +169,7 @@ function SiteHeaderFrame({
         <div className="ml-auto flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2" aria-label={messages.common.switchLanguage}>
+              <Button variant="outline" size="sm" className="gap-2" aria-label={t.switchLanguage}>
                 <Globe className="size-4" />
                 <span>{currentLocaleLabel}</span>
               </Button>
@@ -200,16 +201,16 @@ function SiteHeaderFrame({
                 variant="outline"
                 size="icon"
                 className="md:hidden"
-                aria-label="More options"
+                aria-label={t.moreOptions}
               >
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Theme</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setTheme('light')}>Light</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('dark')}>Dark</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('system')}>System</DropdownMenuItem>
+              <DropdownMenuLabel>{t.themeLabel}</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setTheme('light')}>{t.themeLight}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('dark')}>{t.themeDark}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('system')}>{t.themeSystem}</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <a
@@ -217,7 +218,7 @@ function SiteHeaderFrame({
                   target="_blank"
                   rel="noreferrer"
                   className="flex w-full items-center gap-2"
-                  aria-label="GitHub repository"
+                  aria-label={t.githubRepository}
                 >
                   <Github className="size-4" />
                   <span>GitHub</span>
@@ -227,9 +228,14 @@ function SiteHeaderFrame({
           </DropdownMenu>
 
           <div className="hidden items-center gap-2 md:flex">
-            <ModeToggle />
+            <ModeToggle
+              toggleLabel={t.toggleTheme}
+              themeLightLabel={t.themeLight}
+              themeDarkLabel={t.themeDark}
+              themeSystemLabel={t.themeSystem}
+            />
             <Button variant="outline" size="sm" asChild>
-              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub repository">
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" aria-label={t.githubRepository}>
                 <Github className="size-4" />
               </a>
             </Button>

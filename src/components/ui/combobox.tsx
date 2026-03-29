@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { getLocalizedA11yLabel } from '@/i18n/a11y-labels';
 import { cn } from '@/lib/utils';
 
 export interface ComboboxOption {
@@ -202,7 +203,7 @@ interface ComboboxInputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export function ComboboxInput({
   className,
-  clearLabel = 'Clear search',
+  clearLabel,
   onFocus,
   onKeyDown,
   onChange,
@@ -213,6 +214,7 @@ export function ComboboxInput({
   const displayValue = open ? query : query || selectedLabel;
   const normalizedQuery = normalizeText(query);
   const showClearButton = open && !disabled && normalizedQuery;
+  const resolvedClearLabel = clearLabel?.trim() || props.placeholder?.trim() || getLocalizedA11yLabel('clearSearch');
 
   return (
     <div className="relative w-full">
@@ -255,8 +257,8 @@ export function ComboboxInput({
       {showClearButton ? (
         <button
           type="button"
-          aria-label={clearLabel}
-          title={clearLabel}
+          aria-label={resolvedClearLabel}
+          title={resolvedClearLabel}
           className="absolute right-9 top-1/2 -translate-y-1/2 rounded-sm p-1 text-zinc-500 transition-colors hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-zinc-400 dark:hover:text-zinc-100"
           onMouseDown={(event) => {
             event.preventDefault();

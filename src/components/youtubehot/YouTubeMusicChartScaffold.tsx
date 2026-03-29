@@ -17,7 +17,7 @@ import {
   type YouTubeMusicCountryOption,
 } from '@/lib/youtube-music/types';
 
-interface YouTubeMusicChartScaffoldCopy {
+interface YouTubeMusicChartScaffoldMessages {
   title: string;
   updatedAtLabel: string;
   filterCountrySearchPlaceholder: string;
@@ -29,7 +29,7 @@ interface YouTubeMusicChartScaffoldCopy {
 
 interface YouTubeMusicChartScaffoldProps {
   locale: Locale;
-  copy: YouTubeMusicChartScaffoldCopy;
+  t: YouTubeMusicChartScaffoldMessages;
   country: string;
   countries: YouTubeMusicCountryOption[];
   fetchedAt: string;
@@ -42,7 +42,7 @@ const PAGE_SECTION_CLASS = 'mx-auto w-full px-4 pt-6 md:px-6 md:pt-8 lg:w-[80%]'
 
 export function YouTubeMusicChartScaffold({
   locale,
-  copy,
+  t,
   country,
   countries,
   fetchedAt,
@@ -53,13 +53,13 @@ export function YouTubeMusicChartScaffold({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const baseMusicCopy = getMessages(locale).youtubeMusic;
+  const baseMusicT = getMessages(locale).youtubeMusic;
   const regionDisplayNames = createRegionDisplayNames(locale);
   const countryOptions: ComboboxOption[] = [
     {
       value: YOUTUBE_MUSIC_GLOBAL_COUNTRY_CODE,
-      label: copy.cardGlobal,
-      keywords: [YOUTUBE_MUSIC_GLOBAL_COUNTRY_CODE, copy.cardGlobal],
+      label: t.cardGlobal,
+      keywords: [YOUTUBE_MUSIC_GLOBAL_COUNTRY_CODE, t.cardGlobal],
     },
     ...countries
       .filter((item) => item.countryCode !== YOUTUBE_MUSIC_GLOBAL_COUNTRY_CODE)
@@ -82,9 +82,9 @@ export function YouTubeMusicChartScaffold({
   };
 
   const chartOptions = [
-    { value: `/${locale}/youtube-music`, label: baseMusicCopy.tabTopSongs },
-    { value: `/${locale}/youtube-music/videos-daily`, label: baseMusicCopy.tabVideosDaily },
-    { value: `/${locale}/youtube-music/shorts-songs-daily`, label: baseMusicCopy.tabShortsDaily },
+    { value: `/${locale}/youtube-music`, label: baseMusicT.tabTopSongs },
+    { value: `/${locale}/youtube-music/videos-daily`, label: baseMusicT.tabVideosDaily },
+    { value: `/${locale}/youtube-music/shorts-songs-daily`, label: baseMusicT.tabShortsDaily },
   ];
 
   const currentChartPath =
@@ -99,7 +99,7 @@ export function YouTubeMusicChartScaffold({
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10 text-zinc-900 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100">
       {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} /> : null}
-      <h1 className="sr-only">{copy.title}</h1>
+      <h1 className="sr-only">{t.title}</h1>
       <section className={PAGE_SECTION_CLASS}>
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
           <CardHeader className="p-2 md:p-3">
@@ -108,7 +108,7 @@ export function YouTubeMusicChartScaffold({
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="h-10 min-w-[170px] justify-between">
                     <span className="truncate">
-                      {chartOptions.find((option) => option.value === currentChartPath)?.label ?? baseMusicCopy.tabTopSongs}
+                      {chartOptions.find((option) => option.value === currentChartPath)?.label ?? baseMusicT.tabTopSongs}
                     </span>
                     <ChevronDown className="size-4 opacity-60" />
                   </Button>
@@ -130,15 +130,15 @@ export function YouTubeMusicChartScaffold({
                 <FilterCombobox
                   options={countryOptions}
                   value={country}
-                  placeholder={copy.filterCountrySearchPlaceholder}
-                  emptyText={copy.filterNoMatch}
-                  clearLabel={copy.clearSearch}
+                  placeholder={t.filterCountrySearchPlaceholder}
+                  emptyText={t.filterNoMatch}
+                  clearLabel={t.clearSearch}
                   onValueChange={updateCountry}
                 />
               </div>
 
               <span className="ml-auto shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
-                {copy.updatedAtLabel} {formatRelativeUpdate(fetchedAt, locale)}
+                {t.updatedAtLabel} {formatRelativeUpdate(fetchedAt, locale)}
               </span>
             </div>
           </CardHeader>
@@ -153,7 +153,7 @@ export function YouTubeMusicChartScaffold({
 
         {!errorMessage && !children ? (
           <Card className="mt-2 border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
-            <CardContent className="p-10 text-center text-zinc-500 dark:text-zinc-400">{copy.emptyState}</CardContent>
+            <CardContent className="p-10 text-center text-zinc-500 dark:text-zinc-400">{t.emptyState}</CardContent>
           </Card>
         ) : null}
 

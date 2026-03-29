@@ -5,7 +5,7 @@ import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 import type { YouTubeLiveItem } from '@/lib/youtube-hot/types';
 
-const YOUTUBE_LIVE_METADATA_COPY: Record<Locale, { title: string; description: string; keywords: string[] }> = {
+const YOUTUBE_LIVE_METADATA_TEXT: Record<Locale, { title: string; description: string; keywords: string[] }> = {
   en: {
     title: 'YouTube Live Ranking',
     description: 'Track global YouTube live rankings with language and category filters from scheduled snapshots.',
@@ -40,22 +40,22 @@ const YOUTUBE_LIVE_METADATA_COPY: Record<Locale, { title: string; description: s
   },
 };
 
-function resolveMetadataCopy(locale: Locale) {
+function resolveMetadataText(locale: Locale) {
   return {
-    ...YOUTUBE_LIVE_METADATA_COPY[locale],
+    ...YOUTUBE_LIVE_METADATA_TEXT[locale],
     canonicalPath: `/${locale}/youtube-live`,
     inLanguage: getIntlLocale(locale),
   };
 }
 
 export function buildYouTubeLiveMetadata(locale: Locale): Metadata {
-  const copy = resolveMetadataCopy(locale);
-  const absoluteCanonical = toAbsoluteUrl(copy.canonicalPath);
+  const t = resolveMetadataText(locale);
+  const absoluteCanonical = toAbsoluteUrl(t.canonicalPath);
 
   return {
-    title: copy.title,
-    description: copy.description,
-    keywords: copy.keywords,
+    title: t.title,
+    description: t.description,
+    keywords: t.keywords,
     alternates: {
       canonical: absoluteCanonical,
       languages: buildLocaleAlternates('/youtube-live'),
@@ -63,15 +63,15 @@ export function buildYouTubeLiveMetadata(locale: Locale): Metadata {
     openGraph: {
       type: 'website',
       url: absoluteCanonical,
-      title: copy.title,
-      description: copy.description,
-      locale: copy.inLanguage,
+      title: t.title,
+      description: t.description,
+      locale: t.inLanguage,
       siteName: 'Galaxy Trending',
     },
     twitter: {
       card: 'summary_large_image',
-      title: copy.title,
-      description: copy.description,
+      title: t.title,
+      description: t.description,
     },
     robots: {
       index: true,
@@ -81,7 +81,7 @@ export function buildYouTubeLiveMetadata(locale: Locale): Metadata {
 }
 
 export function buildYouTubeLiveJsonLd(locale: Locale, items: YouTubeLiveItem[]) {
-  const copy = resolveMetadataCopy(locale);
+  const t = resolveMetadataText(locale);
   const itemListElement = items.slice(0, 10).map((item, index) => ({
     '@type': 'ListItem',
     position: index + 1,
@@ -92,14 +92,14 @@ export function buildYouTubeLiveJsonLd(locale: Locale, items: YouTubeLiveItem[])
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: copy.title,
-    description: copy.description,
-    url: toAbsoluteUrl(copy.canonicalPath),
-    inLanguage: copy.inLanguage,
-    about: copy.keywords,
+    name: t.title,
+    description: t.description,
+    url: toAbsoluteUrl(t.canonicalPath),
+    inLanguage: t.inLanguage,
+    about: t.keywords,
     mainEntity: {
       '@type': 'ItemList',
-      name: copy.title,
+      name: t.title,
       itemListOrder: 'https://schema.org/ItemListOrderAscending',
       numberOfItems: itemListElement.length,
       itemListElement,

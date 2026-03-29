@@ -53,7 +53,7 @@ export function YouTubeMusicDailyShortsPage({
   return (
     <YouTubeMusicChartScaffold
       locale={locale}
-      copy={t}
+      t={t}
       country={country}
       countries={countries}
       fetchedAt={fetchedAt}

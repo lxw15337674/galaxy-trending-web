@@ -9,7 +9,7 @@ function buildAbsoluteUrl(pathname: string) {
   return toAbsoluteUrl(pathname);
 }
 
-const YOUTUBE_HOT_METADATA_COPY: Record<Locale, { title: string; description: string; keywords: string[] }> = {
+const YOUTUBE_HOT_METADATA_TEXT: Record<Locale, { title: string; description: string; keywords: string[] }> = {
   en: {
     title: 'YouTube Trending Videos',
     description:
@@ -46,22 +46,22 @@ const YOUTUBE_HOT_METADATA_COPY: Record<Locale, { title: string; description: st
   },
 };
 
-function resolveMetadataCopy(locale: Locale) {
+function resolveMetadataText(locale: Locale) {
   return {
-    ...YOUTUBE_HOT_METADATA_COPY[locale],
+    ...YOUTUBE_HOT_METADATA_TEXT[locale],
     canonicalPath: `/${locale}/youtube-trending`,
     inLanguage: getIntlLocale(locale),
   };
 }
 
 export function buildYouTubeHotMetadata(locale: Locale): Metadata {
-  const copy = resolveMetadataCopy(locale);
-  const absoluteCanonical = buildAbsoluteUrl(copy.canonicalPath);
+  const t = resolveMetadataText(locale);
+  const absoluteCanonical = buildAbsoluteUrl(t.canonicalPath);
 
   return {
-    title: copy.title,
-    description: copy.description,
-    keywords: copy.keywords,
+    title: t.title,
+    description: t.description,
+    keywords: t.keywords,
     alternates: {
       canonical: absoluteCanonical,
       languages: buildLocaleAlternates('/youtube-trending'),
@@ -69,15 +69,15 @@ export function buildYouTubeHotMetadata(locale: Locale): Metadata {
     openGraph: {
       type: 'website',
       url: absoluteCanonical,
-      title: copy.title,
-      description: copy.description,
-      locale: copy.inLanguage,
+      title: t.title,
+      description: t.description,
+      locale: t.inLanguage,
       siteName: 'Galaxy Trending',
     },
     twitter: {
       card: 'summary_large_image',
-      title: copy.title,
-      description: copy.description,
+      title: t.title,
+      description: t.description,
     },
     robots: {
       index: true,
@@ -87,7 +87,7 @@ export function buildYouTubeHotMetadata(locale: Locale): Metadata {
 }
 
 export function buildYouTubeHotJsonLd(locale: Locale, items: YouTubeHotQueryItem[]) {
-  const copy = resolveMetadataCopy(locale);
+  const t = resolveMetadataText(locale);
   const itemListElement = items.slice(0, 10).map((item, index) => ({
     '@type': 'ListItem',
     position: index + 1,
@@ -98,14 +98,14 @@ export function buildYouTubeHotJsonLd(locale: Locale, items: YouTubeHotQueryItem
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: copy.title,
-    description: copy.description,
-    url: buildAbsoluteUrl(copy.canonicalPath),
-    inLanguage: copy.inLanguage,
-    about: copy.keywords,
+    name: t.title,
+    description: t.description,
+    url: buildAbsoluteUrl(t.canonicalPath),
+    inLanguage: t.inLanguage,
+    about: t.keywords,
     mainEntity: {
       '@type': 'ItemList',
-      name: copy.title,
+      name: t.title,
       itemListOrder: 'https://schema.org/ItemListOrderAscending',
       numberOfItems: itemListElement.length,
       itemListElement,
