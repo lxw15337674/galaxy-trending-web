@@ -6,7 +6,7 @@ type ResolvedStorageState = Exclude<BrowserContextOptions['storageState'], undef
 type InMemoryStorageState = Exclude<ResolvedStorageState, string>;
 type StorageStateCookie = InMemoryStorageState['cookies'][number];
 
-const FIXED_X_COOKIE_WEBSITE = 'x.com';
+const FIXED_X_COOKIE_WEBSITES = ['x.com', 'twitter.com'] as const;
 const FIXED_ADMIN_API_BASE_URL = 'https://dev-api.bhwa233.com';
 const ADMIN_API_MAX_RETRIES = 5;
 const ADMIN_API_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -193,8 +193,10 @@ function buildAdminApiError(params: {
   rawText: string | null;
   attempt: number;
   regionKey: string;
+  website: string;
 }) {
   const detailParts = [
+    `website=${params.website}`,
     getString(params.payload?.code) ? `code=${getString(params.payload?.code)}` : null,
     getString(params.payload?.error) ? `error=${getString(params.payload?.error)}` : null,
     getString(params.payload?.message) ? `message=${getString(params.payload?.message)}` : null,
@@ -218,55 +220,62 @@ async function fetchAdminApiCookieConfig(target: XTrendTarget) {
     throw new Error(`Admin API cookie source requires adminApiKey for region=${target.regionKey}`);
   }
 
-  const url = new URL('/api/admin/gist-cookie', FIXED_ADMIN_API_BASE_URL);
-  url.searchParams.set('website', FIXED_X_COOKIE_WEBSITE);
-
   let lastError: Error | null = null;
+  for (const website of FIXED_X_COOKIE_WEBSITES) {
+    const url = new URL('/api/admin/gist-cookie', FIXED_ADMIN_API_BASE_URL);
+    url.searchParams.set('website', website);
 
-  for (let attempt = 1; attempt <= ADMIN_API_MAX_RETRIES; attempt++) {
-    try {
-      const response = await axios.get(url.toString(), {
-        headers: {
-          'x-api-key': apiKey,
-        },
-        responseType: 'text',
-        timeout: 30_000,
-        transformResponse: [(value) => value],
-        validateStatus: () => true,
-      });
-
-      const rawText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-      const parsedPayload = rawText ? (parseJsonString(rawText) as AdminApiSuccessPayload | null) : null;
-
-      if (response.status < 200 || response.status >= 300) {
-        lastError = buildAdminApiError({
-          status: response.status,
-          payload: parsedPayload,
-          rawText,
-          attempt,
-          regionKey: target.regionKey,
+    for (let attempt = 1; attempt <= ADMIN_API_MAX_RETRIES; attempt++) {
+      try {
+        const response = await axios.get(url.toString(), {
+          headers: {
+            'x-api-key': apiKey,
+          },
+          responseType: 'text',
+          timeout: 30_000,
+          transformResponse: [(value) => value],
+          validateStatus: () => true,
         });
 
-        if (attempt < ADMIN_API_MAX_RETRIES && ADMIN_API_RETRYABLE_STATUS.has(response.status)) {
+        const rawText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        const parsedPayload = rawText ? (parseJsonString(rawText) as AdminApiSuccessPayload | null) : null;
+
+        if (response.status < 200 || response.status >= 300) {
+          lastError = buildAdminApiError({
+            status: response.status,
+            payload: parsedPayload,
+            rawText,
+            attempt,
+            regionKey: target.regionKey,
+            website,
+          });
+
+          if (attempt < ADMIN_API_MAX_RETRIES && ADMIN_API_RETRYABLE_STATUS.has(response.status)) {
+            await sleep(attempt * 1_500);
+            continue;
+          }
+
+          const errorCode = getString(parsedPayload?.code)?.toUpperCase();
+          if (response.status === 404 || errorCode === 'NOT_FOUND') {
+            break;
+          }
+
+          throw lastError;
+        }
+
+        if (!parsedPayload?.success || !parsedPayload.data) {
+          throw new Error(
+            `Admin API cookie fetch returned unexpected payload for region=${target.regionKey} website=${website}${rawText ? ` body=${truncateText(rawText)}` : ''}`,
+          );
+        }
+
+        return parsedPayload.data;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < ADMIN_API_MAX_RETRIES) {
           await sleep(attempt * 1_500);
           continue;
         }
-
-        throw lastError;
-      }
-
-      if (!parsedPayload?.success || !parsedPayload.data) {
-        throw new Error(
-          `Admin API cookie fetch returned unexpected payload for region=${target.regionKey}${rawText ? ` body=${truncateText(rawText)}` : ''}`,
-        );
-      }
-
-      return parsedPayload.data;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < ADMIN_API_MAX_RETRIES) {
-        await sleep(attempt * 1_500);
-        continue;
       }
     }
   }
@@ -286,7 +295,7 @@ export async function resolveXTrendStorageState(target: XTrendTarget): Promise<R
 
   const payload = await fetchAdminApiCookieConfig(target);
   const matchedWebsite =
-    getString(payload.matchedWebsite) ?? getString(payload.normalizedWebsite) ?? FIXED_X_COOKIE_WEBSITE;
+    getString(payload.matchedWebsite) ?? getString(payload.normalizedWebsite) ?? FIXED_X_COOKIE_WEBSITES[0];
   const cookieArray = extractCookieArrayFromContent(payload.content, matchedWebsite);
 
   if (!cookieArray?.length) {
