@@ -30,23 +30,16 @@ function resolveLocale(locale: string) {
 export async function generateMetadata({ params }: LocaleLayoutProps): Promise<Metadata> {
   const { locale: requestedLocale } = await params;
   const locale = resolveLocale(requestedLocale);
+  const homeMessages = getMessages(locale).home;
 
   return {
     metadataBase,
     title: {
-      default: 'Galaxy Trending',
-      template: '%s | Galaxy Trending',
+      default: homeMessages.metadataTitle,
+      template: `%s | ${homeMessages.metadataTitle}`,
     },
-    description: getMessages(locale).home.metadataDescription,
-    keywords: [
-      'youtube trending',
-      'youtube trending videos',
-      'youtube trending by region',
-      'youtube trending categories',
-      'youtube video ranking',
-      'youtube live ranking',
-      'youtube live tracker',
-    ],
+    description: homeMessages.metadataDescription,
+    keywords: homeMessages.metadataKeywords,
   };
 }
 

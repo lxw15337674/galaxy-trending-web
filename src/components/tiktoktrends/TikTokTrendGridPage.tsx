@@ -36,7 +36,9 @@ function buildCountryOptions(
 }
 
 export function TikTokTrendGridPage({ initialData, userCountry, jsonLd }: TikTokTrendGridPageProps) {
-  const t = getMessages(initialData.locale).tiktokTrending;
+  const messages = getMessages(initialData.locale);
+  const common = messages.common;
+  const t = messages.tiktokTrending;
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -80,7 +82,7 @@ export function TikTokTrendGridPage({ initialData, userCountry, jsonLd }: TikTok
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <div className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-600 dark:text-orange-300">
-                TikTok Creative Center
+                {common.tiktokCreativeCenter}
               </div>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-4xl">
                 {t.title}

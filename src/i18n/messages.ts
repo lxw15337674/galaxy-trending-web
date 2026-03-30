@@ -29,6 +29,15 @@ const messages = {
     home: {
       metadataTitle: 'Galaxy Trending',
       metadataDescription: '多语言 YouTube 榜单入口页，可直达按小时更新的视频榜和全球直播榜。',
+      metadataKeywords: [
+        'YouTube 榜单',
+        'YouTube 热门视频',
+        'YouTube 趋势',
+        'YouTube Music 榜单',
+        'YouTube 直播榜',
+        'X 热搜',
+        'TikTok 趋势榜',
+      ],
       title: 'Galaxy Trending',
       description: '查看 YouTube Trending 视频榜、YouTube Music 官方周榜，以及基于定时抓取的全球直播榜。',
       musicDescription: '查看 YouTube Music 官方全球热门歌曲周榜，按周跟踪最新榜单变化。',
@@ -342,6 +351,15 @@ const messages = {
     home: {
       metadataTitle: 'Galaxy Trending',
       metadataDescription: 'Multilingual landing page for hourly YouTube trending rankings and global live insights.',
+      metadataKeywords: [
+        'youtube trending',
+        'youtube trending videos',
+        'youtube trending by region',
+        'youtube music charts',
+        'youtube live ranking',
+        'x trends',
+        'tiktok trends',
+      ],
       title: 'Galaxy Trending',
       description: 'Browse YouTube trending videos, official YouTube Music weekly charts, and a global live ranking built from scheduled crawls.',
       musicDescription: 'Open the latest official global weekly YouTube Music top songs chart on a stable indexable URL.',
@@ -655,6 +673,14 @@ const messages = {
     home: {
       metadataTitle: 'Galaxy Trending',
       metadataDescription: 'Página de entrada multilingüe para rankings de tendencias de YouTube y seguimiento global de directos.',
+      metadataKeywords: [
+        'tendencias de youtube',
+        'videos en tendencia de youtube',
+        'ranking de youtube music',
+        'ranking de directos de youtube',
+        'tendencias de x',
+        'tendencias de tiktok',
+      ],
       title: 'Galaxy Trending',
       description: 'Explora tendencias de YouTube, el ranking semanal oficial de YouTube Music y un ranking global de directos basado en rastreos programados.',
       musicDescription: 'Abre el último ranking semanal oficial global de canciones de YouTube Music en una URL estable e indexable.',
@@ -973,6 +999,14 @@ const messages = {
     home: {
       metadataTitle: 'Galaxy Trending',
       metadataDescription: '多言語対応の YouTube ランキング入口ページ。毎時更新の急上昇動画と世界のライブランキングにアクセスできます。',
+      metadataKeywords: [
+        'YouTube 急上昇',
+        'YouTube 動画ランキング',
+        'YouTube Music チャート',
+        'YouTube ライブランキング',
+        'X トレンド',
+        'TikTok トレンド',
+      ],
       title: 'Galaxy Trending',
       description: 'YouTube 動画ランキング、YouTube Music 公式週間チャート、定期クロールに基づく世界のライブランキングを閲覧できます。',
       musicDescription: '最新の YouTube Music 公式グローバル週間トップソングを安定した URL で確認できます。',

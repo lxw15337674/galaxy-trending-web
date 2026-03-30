@@ -40,3 +40,5 @@ generated/
 /dist/
 /.wrangler/
 /.tmp/
+
+.vinext

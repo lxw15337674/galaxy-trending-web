@@ -33,6 +33,7 @@ const GITHUB_REPO_URL = 'https://github.com/lxw15337674/galaxy-trending-web';
 
 function isLocaleSwitchablePath(barePath: string) {
   return (
+    barePath === '/' ||
     barePath === '/youtube-trending' ||
     barePath.startsWith('/youtube-music') ||
     barePath === '/youtube-live' ||
@@ -92,7 +93,7 @@ function SiteHeaderFrame({
   const buildLocaleHref = (nextLocale: Locale) => {
     const nextPath = switchablePath
       ? withLocalePrefix(barePath, nextLocale)
-      : withLocalePrefix('/youtube-trending', nextLocale);
+      : withLocalePrefix('/', nextLocale);
     return switchablePath && switchQuery ? `${nextPath}?${switchQuery}` : nextPath;
   };
   const localeOptions: Array<{ locale: Locale; label: string; href: string }> = [
@@ -221,7 +222,7 @@ function SiteHeaderFrame({
                   aria-label={t.githubRepository}
                 >
                   <Github className="size-4" />
-                  <span>GitHub</span>
+                  <span>{t.githubRepository}</span>
                 </a>
               </DropdownMenuItem>
             </DropdownMenuContent>
