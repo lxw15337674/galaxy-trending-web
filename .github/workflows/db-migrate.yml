@@ -38,3 +38,7 @@ jobs:
 
       - name: Apply database migrations
         run: pnpm db:migrate
+
+      - name: Inspect database state on failure
+        if: failure()
+        run: pnpm tsx scripts/db-inspect.ts
