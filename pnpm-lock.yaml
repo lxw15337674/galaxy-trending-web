@@ -108,6 +108,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.4
         version: 9.39.4
+      '@next/eslint-plugin-next':
+        specifier: 15.5.13
+        version: 15.5.13
       '@types/node':
         specifier: ^20.19.37
         version: 20.19.37
@@ -1308,6 +1311,9 @@ packages:
 
   '@next/env@15.5.13':
     resolution: {integrity: sha512-6h7Fm29+/u1WBPcPaQl0xBov7KXB6i0c8oFlSlehD+PuZJQjzXQBuYzfkM32G5iWOlKsXXyRtcMaaqwspRBujA==}
+
+  '@next/eslint-plugin-next@15.5.13':
+    resolution: {integrity: sha512-VXOc8fVv+Tdi0mcniCYJwhDlAuHdgnSvywCmhAB0PN16yUQq3MH3g0eAuKEpIbamjxxmC3wkgDab/BtoVQDqFA==}
 
   '@next/eslint-plugin-next@15.5.14':
     resolution: {integrity: sha512-ogBjgsFrPPz19abP3VwcYSahbkUOMMvJjxCOYWYndw+PydeMuLuB4XrvNkNutFrTjC9St2KFULRdKID8Sd/CMQ==}
@@ -5891,6 +5897,10 @@ snapshots:
   '@neon-rs/load@0.0.4': {}
 
   '@next/env@15.5.13': {}
+
+  '@next/eslint-plugin-next@15.5.13':
+    dependencies:
+      fast-glob: 3.3.1
 
   '@next/eslint-plugin-next@15.5.14':
     dependencies:
