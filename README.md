@@ -46,7 +46,7 @@ X Trends cookie source selection:
 
 - `X_TREND_COOKIE_SOURCE`
   - `storage_state_file`: 从本地 Playwright `storageState` 文件读取 cookie，适合本地调试
-  - `admin_api`: 从管理接口 `GET https://dev-api.bhwa233.com/api/admin/gist-cookie?website=x.com` 读取 cookie，适合 GitHub Actions / 线上定时抓取
+  - `admin_api`: 从管理接口读取 X/Twitter cookie，优先请求 `website=x.com`，如不存在则自动回退到 `website=twitter.com`，适合 GitHub Actions / 线上定时抓取
 
 If `X_TREND_COOKIE_SOURCE=storage_state_file`:
 
@@ -186,7 +186,7 @@ export X_TREND_STORAGE_STATE_PATH=/path/to/x-storage-state.json
 pnpm crawl:x:trending -- --dry-run
 ```
 
-For CI / GitHub Actions, use `admin_api` mode. The crawler will request the fixed target `x.com` from `https://dev-api.bhwa233.com/api/admin/gist-cookie`, then convert the returned cookie payload into Playwright `storageState` in memory.
+For CI / GitHub Actions, use `admin_api` mode. The crawler will first request `x.com` from `https://dev-api.bhwa233.com/api/admin/gist-cookie`, and automatically fall back to `twitter.com` when the admin API does not have an `x.com` entry. The returned payload is then converted into Playwright `storageState` in memory.
 
 ## API
 
