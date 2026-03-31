@@ -568,69 +568,51 @@ function collectJsonLdTracks(value: unknown) {
 }
 
 async function extractDomTracks(page: Page, selector: 'track-lockup' | 'song-links') {
-  const result = await page.evaluate((requestedSelector) => {
-    function cleanText(value: string | null | undefined) {
-      return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
-    }
-
-    function parseDurationMsFromText(value: string) {
-      const match = cleanText(value).match(/\b(\d{1,2}):(\d{2})\b/);
+  const domExtractionScript = `
+    const requestedSelector = arguments[0];
+    const cleanText = (value) => typeof value === 'string' ? value.replace(/\\s+/g, ' ').trim() : '';
+    const parseDurationMsFromText = (value) => {
+      const match = cleanText(value).match(/\\b(\\d{1,2}):(\\d{2})\\b/);
       if (!match) return null;
       return (Number(match[1]) * 60 + Number(match[2])) * 1000;
-    }
-
-    function normalizeUrl(value: string | null | undefined) {
+    };
+    const normalizeUrl = (value) => {
       const text = cleanText(value);
       if (!text) return null;
-
       try {
         return new URL(text, window.location.origin).toString();
       } catch {
         return null;
       }
-    }
-
-    function parseSongId(url: string | null) {
+    };
+    const parseSongId = (url) => {
       if (!url) return null;
-
       try {
         const parsed = new URL(url);
         const querySongId = parsed.searchParams.get('i');
-        if (querySongId && /^\d+$/.test(querySongId)) {
+        if (querySongId && /^\\d+$/.test(querySongId)) {
           return querySongId;
         }
-
-        const pathMatch = parsed.pathname.match(/\/(\d+)(?:\/?$)/);
+        const pathMatch = parsed.pathname.match(/\\/(\\d+)(?:\\/?$)/);
         return pathMatch?.[1] ?? null;
       } catch {
         return null;
       }
-    }
-
-    function unique(values: string[]) {
-      return Array.from(new Set(values.filter(Boolean)));
-    }
-
-    function pickSongAnchor(scope: ParentNode) {
-      return scope.querySelector<HTMLAnchorElement>('a[href*="/song/"], a[href*="/album/"][href*="?i="]');
-    }
-
-    function extractCandidate(node: Element, index: number) {
-      const row = node as HTMLElement;
+    };
+    const unique = (values) => Array.from(new Set(values.filter(Boolean)));
+    const pickSongAnchor = (scope) => scope.querySelector('a[href*="/song/"], a[href*="/album/"][href*="?i="]');
+    const extractCandidate = (node, index) => {
+      const row = node;
       const songAnchor = pickSongAnchor(row);
-      const artistAnchors = Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href*="/artist/"]'));
-      const img = row.querySelector<HTMLImageElement>('img');
-      const lines = row.innerText
-        .split('\n')
-        .map((line) => cleanText(line))
-        .filter(Boolean);
-      const rankLine = lines.find((line) => /^\d{1,3}$/.test(line)) ?? '';
+      const artistAnchors = Array.from(row.querySelectorAll('a[href*="/artist/"]'));
+      const img = row.querySelector('img');
+      const lines = row.innerText.split('\\n').map((line) => cleanText(line)).filter(Boolean);
+      const rankLine = lines.find((line) => /^\\d{1,3}$/.test(line)) ?? '';
       const rank = Number(rankLine);
       const title = cleanText(songAnchor?.textContent) || cleanText(lines[0]) || null;
       const artistNames = unique(artistAnchors.map((anchor) => cleanText(anchor.textContent)));
       const appleSongUrl = normalizeUrl(songAnchor?.getAttribute('href') ?? songAnchor?.href);
       const durationMs = parseDurationMsFromText(lines.join(' '));
-
       return {
         source: requestedSelector === 'track-lockup' ? 'track-lockup' : 'song-links',
         order: index,
@@ -646,36 +628,33 @@ async function extractDomTracks(page: Page, selector: 'track-lockup' | 'song-lin
           rowText: cleanText(row.innerText),
         },
       };
-    }
-
+    };
     if (requestedSelector === 'track-lockup') {
-      return Array.from(document.querySelectorAll('[data-testid="track-lockup"]')).map((node, index) =>
-        extractCandidate(node, index),
-      );
+      return Array.from(document.querySelectorAll('[data-testid="track-lockup"]')).map((node, index) => extractCandidate(node, index));
     }
-
-    const seenUrls = new Set<string>();
-    const candidates: Array<ReturnType<typeof extractCandidate>> = [];
-    Array.from(document.querySelectorAll('main a[href*="/song/"], main a[href*="/album/"][href*="?i="]')).forEach(
-      (anchor, index) => {
-        const songAnchor = anchor as HTMLAnchorElement;
-        const normalizedUrl = normalizeUrl(songAnchor.getAttribute('href') ?? songAnchor.href);
-        if (!normalizedUrl || seenUrls.has(normalizedUrl)) {
-          return;
-        }
-
-        seenUrls.add(normalizedUrl);
-        const row =
-          anchor.closest('[data-testid="track-lockup"]') ||
-          anchor.closest('li') ||
-          anchor.closest('article') ||
-          anchor.closest('div') ||
-          anchor;
-        candidates.push(extractCandidate(row, index));
-      },
-    );
+    const seenUrls = new Set();
+    const candidates = [];
+    Array.from(document.querySelectorAll('main a[href*="/song/"], main a[href*="/album/"][href*="?i="]')).forEach((anchor, index) => {
+      const normalizedUrl = normalizeUrl(anchor.getAttribute('href') ?? anchor.href);
+      if (!normalizedUrl || seenUrls.has(normalizedUrl)) {
+        return;
+      }
+      seenUrls.add(normalizedUrl);
+      const row =
+        anchor.closest('[data-testid="track-lockup"]') ||
+        anchor.closest('li') ||
+        anchor.closest('article') ||
+        anchor.closest('div') ||
+        anchor;
+      candidates.push(extractCandidate(row, index));
+    });
     return candidates;
-  }, selector);
+  `;
+
+  const result = await page.evaluate(
+    ({ requestedSelector, script }) => new Function(script)(requestedSelector),
+    { requestedSelector: selector, script: domExtractionScript },
+  );
 
   return buildChartItems(result);
 }
