@@ -38,6 +38,8 @@ function isLocaleSwitchablePath(barePath: string) {
     barePath.startsWith('/youtube-music') ||
     barePath.startsWith('/apple-music') ||
     barePath === '/youtube-live' ||
+    barePath === '/twitch-live' ||
+    barePath === '/twitch-categories' ||
     barePath === '/x-trending' ||
     barePath === '/tiktok-trending' ||
     barePath === '/tiktok-videos'
@@ -57,45 +59,52 @@ function SiteHeaderFrame({
   const messages = getMessages(locale);
   const t = messages.common;
   const barePath = stripLocalePrefix(pathname ?? '/');
+  const isActivePath = (paths: string[]) => paths.some((itemPath) => barePath === itemPath || barePath.startsWith(`${itemPath}/`));
   const siteNav = [
     {
-      path: '/youtube-trending',
+      paths: ['/youtube-trending'],
       href: withLocalePrefix('/youtube-trending', locale),
       label: t.navYouTubeHot,
       mobileLabel: t.navYouTubeHotShort,
     },
     {
-      path: '/youtube-music',
+      paths: ['/youtube-music'],
       href: withLocalePrefix('/youtube-music', locale),
       label: t.navYouTubeMusic,
       mobileLabel: t.navYouTubeMusicShort,
     },
     {
-      path: '/apple-music',
+      paths: ['/apple-music'],
       href: withLocalePrefix('/apple-music', locale),
       label: t.navAppleMusic,
       mobileLabel: t.navAppleMusicShort,
     },
     {
-      path: '/youtube-live',
+      paths: ['/youtube-live'],
       href: withLocalePrefix('/youtube-live', locale),
       label: t.navYouTubeLive,
       mobileLabel: t.navYouTubeLiveShort,
     },
     {
-      path: '/x-trending',
+      paths: ['/twitch-live', '/twitch-categories'],
+      href: withLocalePrefix('/twitch-live', locale),
+      label: t.navTwitch,
+      mobileLabel: t.navTwitchShort,
+    },
+    {
+      paths: ['/x-trending'],
       href: withLocalePrefix('/x-trending', locale),
       label: t.navXTrends,
       mobileLabel: t.navXTrendsShort,
     },
     {
-      path: '/tiktok-trending',
+      paths: ['/tiktok-trending'],
       href: withLocalePrefix('/tiktok-trending', locale),
       label: t.navTikTokTrends,
       mobileLabel: t.navTikTokTrendsShort,
     },
     {
-      path: '/tiktok-videos',
+      paths: ['/tiktok-videos'],
       href: withLocalePrefix('/tiktok-videos', locale),
       label: t.navTikTokVideos,
       mobileLabel: t.navTikTokVideosShort,
@@ -116,7 +125,7 @@ function SiteHeaderFrame({
     { locale: 'ja', label: getLocaleLabel('ja'), href: buildLocaleHref('ja') },
   ];
   const currentLocaleLabel = localeOptions.find((option) => option.locale === locale)?.label ?? getLocaleLabel(locale);
-  const activeItem = siteNav.find((item) => barePath === item.path || barePath.startsWith(`${item.path}/`));
+  const activeItem = siteNav.find((item) => isActivePath(item.paths));
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -134,7 +143,7 @@ function SiteHeaderFrame({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 {siteNav.map((item) => {
-                  const isActive = barePath === item.path || barePath.startsWith(`${item.path}/`);
+                  const isActive = isActivePath(item.paths);
                   return (
                     <DropdownMenuItem
                       key={item.href}
@@ -156,7 +165,7 @@ function SiteHeaderFrame({
         <NavigationMenu className="hidden max-w-none justify-start md:flex">
           <NavigationMenuList>
             {siteNav.map((item) => {
-              const isActive = barePath === item.path || barePath.startsWith(`${item.path}/`);
+              const isActive = isActivePath(item.paths);
               return (
                 <NavigationMenuItem key={item.href}>
                   <NavigationMenuLink asChild>

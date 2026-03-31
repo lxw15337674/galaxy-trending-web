@@ -33,15 +33,19 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-function syncProcessEnvFromBindings(env: Env) {
+function syncProcessEnvFromBindings(env?: Partial<Env>) {
   if (typeof process === 'undefined' || !process.env) return;
 
+  // vinext start can invoke the worker entry without Cloudflare bindings.
+  // Fall back to an empty object so local production serving does not crash.
+  const sourceEnv = env ?? {};
+
   const bindings: Record<string, string | undefined> = {
-    NEXT_PUBLIC_SITE_URL: env.NEXT_PUBLIC_SITE_URL,
-    TURSO_AUTH_TOKEN: env.TURSO_AUTH_TOKEN,
-    TURSO_DATABASE_URL: env.TURSO_DATABASE_URL,
-    YOUTUBE_API_KEY_DAILY: env.YOUTUBE_API_KEY_DAILY,
-    YOUTUBE_API_KEY_LIVE: env.YOUTUBE_API_KEY_LIVE,
+    NEXT_PUBLIC_SITE_URL: sourceEnv.NEXT_PUBLIC_SITE_URL,
+    TURSO_AUTH_TOKEN: sourceEnv.TURSO_AUTH_TOKEN,
+    TURSO_DATABASE_URL: sourceEnv.TURSO_DATABASE_URL,
+    YOUTUBE_API_KEY_DAILY: sourceEnv.YOUTUBE_API_KEY_DAILY,
+    YOUTUBE_API_KEY_LIVE: sourceEnv.YOUTUBE_API_KEY_LIVE,
   };
 
   for (const [key, value] of Object.entries(bindings)) {
@@ -58,7 +62,7 @@ function syncProcessEnvFromBindings(env: Env) {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env?: Env, ctx?: ExecutionContext): Promise<Response> {
     syncProcessEnvFromBindings(env);
 
     const url = new URL(request.url);
@@ -66,7 +70,7 @@ export default {
     // Image optimization via Cloudflare Images binding.
     // The parseImageParams validation inside handleImageOptimization
     // normalizes backslashes and validates the origin hasn't changed.
-    if (url.pathname === "/_vinext/image") {
+    if (url.pathname === "/_vinext/image" && env?.ASSETS && env?.IMAGES) {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
@@ -78,7 +82,7 @@ export default {
     }
 
     // Provide a stable favicon path to avoid 404 noise in browser console.
-    if (url.pathname === "/favicon.ico") {
+    if (url.pathname === "/favicon.ico" && env?.ASSETS) {
       return env.ASSETS.fetch(new Request(new URL("/platform-icons/youtube.ico", request.url)));
     }
 

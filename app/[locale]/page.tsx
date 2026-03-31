@@ -74,6 +74,18 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       description: messages.home.musicDescription,
     },
     {
+      href: `/${locale}/twitch-live`,
+      platform: 'Twitch',
+      label: messages.common.navTwitch,
+      description: messages.home.twitchLiveDescription,
+    },
+    {
+      href: `/${locale}/twitch-categories`,
+      platform: 'Twitch',
+      label: messages.twitchCategories.title,
+      description: messages.home.twitchCategoriesDescription,
+    },
+    {
       href: `/${locale}/apple-music`,
       platform: 'Apple Music',
       label: messages.common.navAppleMusic,
