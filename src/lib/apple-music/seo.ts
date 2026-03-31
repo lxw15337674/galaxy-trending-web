@@ -3,6 +3,7 @@ import type { Locale } from '@/i18n/config';
 import { getIntlLocale } from '@/i18n/locale-meta';
 import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
+import { getLocalizedAppleMusicCountryLabel } from './labels';
 import type { AppleMusicChartItem } from './types';
 
 const APPLE_MUSIC_METADATA_TEXT: Record<Locale, { title: string; description: string; keywords: string[] }> = {
@@ -28,16 +29,52 @@ const APPLE_MUSIC_METADATA_TEXT: Record<Locale, { title: string; description: st
   },
 };
 
-function resolveMetadataText(locale: Locale) {
+interface AppleMusicMetadataOptions {
+  countryCode?: string;
+  countryName?: string;
+}
+
+function buildCountryDescriptionSuffix(locale: Locale, countryLabel: string) {
+  if (locale === 'zh') return `当前国家：${countryLabel}。`;
+  if (locale === 'es') return `País actual: ${countryLabel}.`;
+  if (locale === 'ja') return `現在の国: ${countryLabel}。`;
+  return `Current country: ${countryLabel}.`;
+}
+
+function buildLocaleAlternatesWithCountry(countryCode: string | undefined) {
+  const alternates = buildLocaleAlternates('/apple-music');
+  if (!countryCode || countryCode === 'global') {
+    return alternates;
+  }
+
+  const querySuffix = `?country=${encodeURIComponent(countryCode)}`;
+  return Object.fromEntries(Object.entries(alternates).map(([key, value]) => [key, `${value}${querySuffix}`]));
+}
+
+function resolveMetadataText(locale: Locale, options?: AppleMusicMetadataOptions) {
+  const base = APPLE_MUSIC_METADATA_TEXT[locale];
+  const normalizedCountryCode = options?.countryCode?.trim() || 'global';
+  const countryLabel =
+    normalizedCountryCode !== 'global'
+      ? getLocalizedAppleMusicCountryLabel(normalizedCountryCode, options?.countryName, locale)
+      : null;
+  const canonicalPath =
+    normalizedCountryCode !== 'global'
+      ? `/${locale}/apple-music?country=${encodeURIComponent(normalizedCountryCode)}`
+      : `/${locale}/apple-music`;
+
   return {
-    ...APPLE_MUSIC_METADATA_TEXT[locale],
-    canonicalPath: `/${locale}/apple-music`,
+    title: countryLabel ? `${base.title} - ${countryLabel}` : base.title,
+    description: countryLabel ? `${base.description} ${buildCountryDescriptionSuffix(locale, countryLabel)}` : base.description,
+    keywords: base.keywords,
+    canonicalPath,
+    alternates: buildLocaleAlternatesWithCountry(countryLabel ? normalizedCountryCode : undefined),
     inLanguage: getIntlLocale(locale),
   };
 }
 
-export function buildAppleMusicMetadata(locale: Locale): Metadata {
-  const t = resolveMetadataText(locale);
+export function buildAppleMusicMetadata(locale: Locale, options?: AppleMusicMetadataOptions): Metadata {
+  const t = resolveMetadataText(locale, options);
   const absoluteCanonical = toAbsoluteUrl(t.canonicalPath);
 
   return {
@@ -46,7 +83,7 @@ export function buildAppleMusicMetadata(locale: Locale): Metadata {
     keywords: t.keywords,
     alternates: {
       canonical: absoluteCanonical,
-      languages: buildLocaleAlternates('/apple-music'),
+      languages: t.alternates,
     },
     openGraph: {
       type: 'website',
@@ -68,8 +105,8 @@ export function buildAppleMusicMetadata(locale: Locale): Metadata {
   };
 }
 
-export function buildAppleMusicJsonLd(locale: Locale, items: AppleMusicChartItem[]) {
-  const t = resolveMetadataText(locale);
+export function buildAppleMusicJsonLd(locale: Locale, items: AppleMusicChartItem[], options?: AppleMusicMetadataOptions) {
+  const t = resolveMetadataText(locale, options);
   const itemListElement = items.slice(0, 10).map((item, index) => ({
     '@type': 'ListItem',
     position: index + 1,

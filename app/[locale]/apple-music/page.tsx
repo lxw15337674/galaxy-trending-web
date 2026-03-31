@@ -22,10 +22,18 @@ function resolveLocale(locale: string): Locale {
   return locale;
 }
 
-export async function generateMetadata({ params }: AppleMusicPageProps): Promise<Metadata> {
-  const { locale: requestedLocale } = await params;
+export async function generateMetadata({ params, searchParams }: AppleMusicPageProps): Promise<Metadata> {
+  const [{ locale: requestedLocale }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve(undefined),
+  ]);
   const locale = resolveLocale(requestedLocale);
-  return buildAppleMusicMetadata(locale);
+  const pageData = await buildAppleMusicPageData(resolvedSearchParams, locale);
+
+  return buildAppleMusicMetadata(locale, {
+    countryCode: pageData.country,
+    countryName: pageData.countryName,
+  });
 }
 
 export default async function AppleMusicPage({ params, searchParams }: AppleMusicPageProps) {
@@ -35,7 +43,10 @@ export default async function AppleMusicPage({ params, searchParams }: AppleMusi
   ]);
   const locale = resolveLocale(requestedLocale);
   const pageData = await buildAppleMusicPageData(resolvedSearchParams, locale);
-  const jsonLd = buildAppleMusicJsonLd(locale, pageData.items);
+  const jsonLd = buildAppleMusicJsonLd(locale, pageData.items, {
+    countryCode: pageData.country,
+    countryName: pageData.countryName,
+  });
 
   return <AppleMusicGridPage {...pageData} jsonLd={jsonLd} />;
 }

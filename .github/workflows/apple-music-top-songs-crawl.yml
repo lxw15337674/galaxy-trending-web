@@ -1,0 +1,43 @@
+name: Apple Music Top Songs Crawl
+
+on:
+  schedule:
+    - cron: '50 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-music-top-songs-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl-apple-music-top-songs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Shanghai
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      APPLE_MUSIC_TOP_SONGS_COUNTRY_CODES: US,JP
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Crawl Apple Music top songs
+        run: pnpm crawl:apple-music:top-songs

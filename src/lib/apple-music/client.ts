@@ -2,15 +2,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { normalizeAppleMusicArtworkUrl } from './artwork';
 import {
-  getAppleMusicCountrySlug,
+  APPLE_MUSIC_KNOWN_COUNTRY_CODES,
+  getAppleMusicCountryName,
   normalizeAppleMusicCountryCode,
 } from './countries';
 import {
   APPLE_MUSIC_DAILY_PERIOD_TYPE,
   APPLE_MUSIC_GLOBAL_COUNTRY_CODE,
-  APPLE_MUSIC_GLOBAL_COUNTRY_NAME,
   APPLE_MUSIC_TOP_SONGS_CHART_TYPE,
-  APPLE_MUSIC_TOP_SONGS_INDEX_URL,
+  APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE,
   type AppleMusicChartItem,
   type AppleMusicCountryOption,
   type AppleMusicTopSongsSnapshot,
@@ -18,10 +18,45 @@ import {
 
 const REQUEST_TIMEOUT_MS = 15000;
 const COUNTRY_DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000;
-const COUNTRY_LINK_RE = /"title":"Top 100: (?<country>[^"]+)".+?"url":"https:\/\/music\.apple\.com\/us\/playlist\/(?<slug>[^/]+)\/(?<playlist>pl\.[^"]+)"/gs;
-const TRACK_BLOCK_MARKER = '"id":"track-lockup - ';
-const TRACK_LIST_END_MARKER = '],"header":{"kind":"default"';
+const APPLE_MUSIC_FEED_BASE_URL = 'https://rss.applemarketingtools.com/api/v2';
+const APPLE_MUSIC_FEED_MARKER = '__APPLE_MUSIC_FEED_FINAL_URL__:';
+const APPLE_MUSIC_FEED_COUNT = 100;
 const execFileAsync = promisify(execFile);
+
+interface AppleMusicFeedLink {
+  self?: string;
+}
+
+interface AppleMusicFeedSong {
+  artistName?: string;
+  artistUrl?: string;
+  artworkUrl100?: string;
+  contentAdvisoryRating?: string;
+  genres?: Array<{ genreId?: string; name?: string; url?: string }>;
+  id?: string;
+  kind?: string;
+  name?: string;
+  releaseDate?: string;
+  url?: string;
+}
+
+interface AppleMusicFeedPayload {
+  feed?: {
+    title?: string;
+    id?: string;
+    author?: { name?: string; url?: string };
+    links?: AppleMusicFeedLink[];
+    copyright?: string;
+    country?: string;
+    updated?: string;
+    results?: AppleMusicFeedSong[];
+  };
+}
+
+interface TextResponse {
+  body: string;
+  finalUrl: string;
+}
 
 let countryCache:
   | {
@@ -40,29 +75,22 @@ function getCountryCache() {
   return cloneCountryOptions(countryCache.data);
 }
 
-function decodeJsonString(fragment: string | null | undefined) {
-  if (!fragment) return null;
+function buildFeedUrl(countryCode: string) {
+  return `${APPLE_MUSIC_FEED_BASE_URL}/${countryCode.toLowerCase()}/music/most-played/${APPLE_MUSIC_FEED_COUNT}/songs.json`;
+}
 
-  try {
-    return JSON.parse(fragment) as string;
-  } catch {
-    return null;
+function parseFinalUrl(stdout: string) {
+  const markerIndex = stdout.lastIndexOf(APPLE_MUSIC_FEED_MARKER);
+  if (markerIndex < 0) {
+    return { body: stdout, finalUrl: '' };
   }
+
+  const body = stdout.slice(0, markerIndex);
+  const finalUrl = stdout.slice(markerIndex + APPLE_MUSIC_FEED_MARKER.length).trim();
+  return { body, finalUrl };
 }
 
-function extractJsonString(input: string, pattern: RegExp) {
-  const match = input.match(pattern);
-  return decodeJsonString(match?.groups?.value ?? null);
-}
-
-function extractNumber(input: string, pattern: RegExp) {
-  const match = input.match(pattern);
-  if (!match?.groups?.value) return null;
-  const parsed = Number(match.groups.value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-async function fetchTextViaCurl(url: string) {
+async function fetchTextViaCurl(url: string): Promise<TextResponse> {
   const command = process.platform === 'win32' ? 'curl.exe' : 'curl';
   const args = [
     '-L',
@@ -72,16 +100,23 @@ async function fetchTextViaCurl(url: string) {
     'Mozilla/5.0',
     '-H',
     'Accept-Language: en-US,en;q=0.9',
+    '-w',
+    `\n${APPLE_MUSIC_FEED_MARKER}%{url_effective}`,
     url,
   ];
-  const { stdout } = await execFileAsync(command, args, { maxBuffer: 12 * 1024 * 1024 });
-  if (!stdout || !stdout.trim()) {
-    throw new Error(`Empty response while fetching Apple Music URL: ${url}`);
+  const { stdout } = await execFileAsync(command, args, { maxBuffer: 8 * 1024 * 1024 });
+  const { body, finalUrl } = parseFinalUrl(stdout);
+  if (!body || !body.trim()) {
+    throw new Error(`Empty response while fetching Apple Music feed URL: ${url}`);
   }
-  return stdout;
+
+  return {
+    body,
+    finalUrl: finalUrl || url,
+  };
 }
 
-async function fetchText(url: string) {
+async function fetchText(url: string): Promise<TextResponse> {
   try {
     return await fetchTextViaCurl(url);
   } catch (curlError) {
@@ -97,134 +132,91 @@ async function fetchText(url: string) {
           'user-agent': 'Mozilla/5.0',
         },
       });
-      const text = await response.text();
+      const body = await response.text();
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-      if (!text || !text.trim()) {
-        throw new Error(`Empty response while fetching Apple Music URL: ${url}`);
+      if (!body || !body.trim()) {
+        throw new Error(`Empty response while fetching Apple Music feed URL: ${url}`);
       }
-      return text;
+
+      return {
+        body,
+        finalUrl: response.url || url,
+      };
     } catch (fetchError) {
       const message = fetchError instanceof Error ? fetchError.message : String(fetchError);
       const curlMessage = curlError instanceof Error ? curlError.message : String(curlError);
-      throw new Error(`Apple Music fetch failed for ${url}. curl=${curlMessage}; fetch=${message}`);
+      throw new Error(`Apple Music feed fetch failed for ${url}. curl=${curlMessage}; fetch=${message}`);
     } finally {
       clearTimeout(timer);
     }
   }
 }
 
-function toCountryCode(playlistSlug: string) {
-  const normalizedPlaylistSlug = playlistSlug.trim().toLowerCase();
-  if (!normalizedPlaylistSlug) return APPLE_MUSIC_GLOBAL_COUNTRY_CODE;
+async function fetchFeed(url: string) {
+  const response = await fetchText(url);
+  let payload: AppleMusicFeedPayload;
 
-  const slugSuffix = normalizedPlaylistSlug.startsWith('top-100-')
-    ? normalizedPlaylistSlug.slice('top-100-'.length)
-    : normalizedPlaylistSlug;
-
-  return normalizeAppleMusicCountryCode(slugSuffix);
-}
-
-function parseCountryOptions(html: string) {
-  const countries: AppleMusicCountryOption[] = [];
-  const seen = new Set<string>();
-
-  for (const match of html.matchAll(COUNTRY_LINK_RE)) {
-    const countryName = match.groups?.country?.trim() ?? '';
-    const playlistId = match.groups?.playlist?.trim() ?? '';
-    const playlistSlug = match.groups?.slug?.trim() ?? '';
-    const countryCode = toCountryCode(playlistSlug);
-    const sourceUrl = playlistSlug && playlistId ? `https://music.apple.com/us/playlist/${playlistSlug}/${playlistId}` : '';
-
-    if (!countryName || !playlistId || !playlistSlug || !sourceUrl || seen.has(countryCode)) {
-      continue;
-    }
-
-    seen.add(countryCode);
-    countries.push({
-      countryCode,
-      countryName,
-      playlistId,
-      playlistSlug,
-      sourceUrl,
-    });
-  }
-
-  if (!countries.length) {
-    throw new Error('Unable to locate Apple Music top song country links in chart index HTML');
-  }
-
-  return countries;
-}
-
-function splitTrackBlocks(html: string) {
-  const blocks: string[] = [];
-  const listEnd = html.indexOf(TRACK_LIST_END_MARKER);
-  if (listEnd < 0) return blocks;
-
-  let cursor = html.indexOf(TRACK_BLOCK_MARKER);
-  while (cursor >= 0 && cursor < listEnd) {
-    const next = html.indexOf(TRACK_BLOCK_MARKER, cursor + TRACK_BLOCK_MARKER.length);
-    const end = next >= 0 && next < listEnd ? next - 2 : listEnd;
-    blocks.push(html.slice(cursor, end));
-    if (next < 0 || next >= listEnd) {
-      break;
-    }
-    cursor = next;
-  }
-
-  return blocks;
-}
-
-function parseTrackBlock(block: string, index: number): AppleMusicChartItem | null {
-  const idMatch = block.match(/"id":"track-lockup - [^"]+ - (?<value>\d+)"/);
-  const songId = idMatch?.groups?.value?.trim() ?? '';
-  const trackName = extractJsonString(block, /"title":(?<value>"(?:\\.|[^"\\])*")/);
-  const artistNames = extractJsonString(block, /"artistName":(?<value>"(?:\\.|[^"\\])*")/);
-  const appleSongUrl = extractJsonString(
-    block,
-    /"contentDescriptor":\{"kind":"song","identifiers":\{"storeAdamID":"\d+"\},"url":(?<value>"(?:\\.|[^"\\])*")/,
-  );
-  const thumbnailUrl = extractJsonString(
-    block,
-    /"artwork":\{"dictionary":\{[^}]*"url":(?<value>"(?:\\.|[^"\\])*")/,
-  );
-  const durationMs = extractNumber(block, /"duration":(?<value>\d+)/);
-  const normalizedThumbnailUrl = normalizeAppleMusicArtworkUrl(thumbnailUrl);
-
-  if (!songId || !trackName || !artistNames || !appleSongUrl) {
-    return null;
+  try {
+    payload = JSON.parse(response.body) as AppleMusicFeedPayload;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Apple Music feed returned invalid JSON for ${url}: ${message}`);
   }
 
   return {
-    rank: index + 1,
-    trackName,
-    artistNames,
-    appleSongId: songId,
-    appleSongUrl,
-    durationMs,
-    thumbnailUrl: normalizedThumbnailUrl,
-    rawItem: {
-      trackName,
-      artistNames,
-      appleSongId: songId,
-      appleSongUrl,
-      durationMs,
-      thumbnailUrl: normalizedThumbnailUrl,
-    },
+    payload,
+    finalUrl: response.finalUrl,
   };
 }
 
-function parsePlaylistTitle(html: string, fallbackCountryName: string) {
-  const match = html.match(/<meta name="apple:title" content="(?<value>[^"]+)">/);
-  return match?.groups?.value?.trim() || `Top 100: ${fallbackCountryName}`;
+function toCountryOption(countryCode: string): AppleMusicCountryOption {
+  const normalizedCountryCode = normalizeAppleMusicCountryCode(countryCode);
+  return {
+    countryCode: normalizedCountryCode,
+    countryName: getAppleMusicCountryName(normalizedCountryCode) ?? normalizedCountryCode,
+    playlistId: `feed:${normalizedCountryCode.toLowerCase()}`,
+    playlistSlug: 'most-played-songs',
+    sourceUrl: '',
+  };
 }
 
-function parseTopSongsItems(html: string) {
-  return splitTrackBlocks(html)
-    .map((block, index) => parseTrackBlock(block, index))
-    .filter((item): item is AppleMusicChartItem => Boolean(item));
+function parseFetchedAt(feedUpdated: string | undefined) {
+  const parsed = new Date(String(feedUpdated ?? '').trim());
+  if (Number.isNaN(parsed.valueOf())) {
+    throw new Error(`Apple Music feed is missing a valid updated timestamp: ${feedUpdated ?? 'N/A'}`);
+  }
+
+  return parsed.toISOString();
+}
+
+function parseFeedItems(results: AppleMusicFeedSong[] | undefined): AppleMusicChartItem[] {
+  if (!Array.isArray(results) || results.length === 0) {
+    throw new Error('Apple Music feed returned no songs');
+  }
+
+  return results.map((item, index) => {
+    const appleSongId = String(item.id ?? '').trim();
+    const trackName = String(item.name ?? '').trim();
+    const artistNames = String(item.artistName ?? '').trim();
+    const appleSongUrl = String(item.url ?? '').trim();
+
+    if (!appleSongId || !trackName || !artistNames || !appleSongUrl) {
+      throw new Error(`Apple Music feed item at rank=${index + 1} is missing required fields`);
+    }
+
+    return {
+      rank: index + 1,
+      trackName,
+      artistNames,
+      appleSongId,
+      appleSongUrl,
+      durationMs: null,
+      thumbnailUrl: normalizeAppleMusicArtworkUrl(item.artworkUrl100),
+      rawItem: item,
+    };
+  });
 }
 
 export class AppleMusicChartsClient {
@@ -234,60 +226,55 @@ export class AppleMusicChartsClient {
       return cached;
     }
 
-    const html = await fetchText(APPLE_MUSIC_TOP_SONGS_INDEX_URL);
-    const countries = parseCountryOptions(html);
+    const countries = APPLE_MUSIC_KNOWN_COUNTRY_CODES.map((countryCode) => toCountryOption(countryCode));
     countryCache = {
       expiresAt: Date.now() + COUNTRY_DISCOVERY_CACHE_TTL_MS,
       data: cloneCountryOptions(countries),
     };
+
     return cloneCountryOptions(countries);
   }
 
   async fetchDailyTopSongs(countryCodeInput: string): Promise<AppleMusicTopSongsSnapshot> {
     const countryCode = normalizeAppleMusicCountryCode(countryCodeInput);
-    const requestedCountrySlug = getAppleMusicCountrySlug(countryCodeInput);
-    const countries = await this.listAvailableTopSongsCountries();
-    const country =
-      countries.find((item) => item.countryCode === countryCode) ??
-      countries.find((item) => item.playlistSlug === requestedCountrySlug);
-
-    if (!country) {
-      throw new Error(`Unsupported Apple Music country code: ${countryCode}`);
+    if (countryCode === APPLE_MUSIC_GLOBAL_COUNTRY_CODE) {
+      throw new Error('Apple Music global top songs are not available from the current official feed source');
     }
 
-    const html = await fetchText(country.sourceUrl);
-    const items = parseTopSongsItems(html);
-    if (!items.length) {
-      throw new Error(`No Apple Music top songs found for country=${country.countryCode}`);
+    const requestedFeedUrl = buildFeedUrl(countryCode);
+    const { payload, finalUrl } = await fetchFeed(requestedFeedUrl);
+    const feed = payload.feed;
+    if (!feed) {
+      throw new Error(`Apple Music feed payload is missing the feed object for country=${countryCode}`);
     }
 
-    const fetchedAt = new Date().toISOString();
-    const chartEndDate = fetchedAt.slice(0, 10);
-    const playlistTitle = parsePlaylistTitle(html, country.countryName);
+    const fetchedAt = parseFetchedAt(feed.updated);
+    const items = parseFeedItems(feed.results);
+    const countryName = getAppleMusicCountryName(countryCode) ?? countryCode;
+    const playlistTitle = `${String(feed.title ?? 'Top Songs').trim()}: ${countryName}`;
 
     return {
       chartType: APPLE_MUSIC_TOP_SONGS_CHART_TYPE,
       periodType: APPLE_MUSIC_DAILY_PERIOD_TYPE,
-      countryCode: country.countryCode,
-      countryName:
-        country.countryName ||
-        (country.countryCode === APPLE_MUSIC_GLOBAL_COUNTRY_CODE
-          ? APPLE_MUSIC_GLOBAL_COUNTRY_NAME
-          : country.countryCode),
-      chartEndDate,
+      countryCode,
+      countryName,
+      chartEndDate: fetchedAt.slice(0, 10),
       fetchedAt,
-      sourceUrl: country.sourceUrl,
-      playlistId: country.playlistId,
-      playlistSlug: country.playlistSlug,
+      sourceUrl: '',
+      playlistId: `feed:${countryCode.toLowerCase()}`,
+      playlistSlug: 'most-played-songs',
       playlistTitle,
       items,
       rawPayload: {
-        sourceIndexUrl: APPLE_MUSIC_TOP_SONGS_INDEX_URL,
-        playlistId: country.playlistId,
-        playlistSlug: country.playlistSlug,
-        playlistTitle,
-        countryCode: country.countryCode,
-        trackCount: items.length,
+        sourceType: APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE,
+        requestedFeedUrl,
+        finalFeedUrl: finalUrl,
+        feedId: feed.id ?? null,
+        feedCountry: feed.country ?? null,
+        feedTitle: feed.title ?? null,
+        feedUpdated: feed.updated ?? null,
+        resultCount: items.length,
+        dateSource: 'feed.updated',
       },
     };
   }

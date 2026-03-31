@@ -50,6 +50,10 @@ const APPLE_MUSIC_CANONICAL_CODE_TO_COUNTRY_SLUG = Object.fromEntries(
   Object.entries(APPLE_MUSIC_COUNTRY_SLUG_TO_CANONICAL_CODE).map(([slug, code]) => [code, slug]),
 ) as Record<string, string>;
 
+export const APPLE_MUSIC_KNOWN_COUNTRY_CODES = Object.freeze(
+  Array.from(new Set(Object.values(APPLE_MUSIC_COUNTRY_SLUG_TO_CANONICAL_CODE))).sort(),
+);
+
 export function normalizeAppleMusicCountryCode(value: string | null | undefined) {
   const rawValue = String(value ?? '').trim();
   if (!rawValue) return 'global';
@@ -99,4 +103,16 @@ export function getAppleMusicCountryCodeAliases(value: string | null | undefined
   }
 
   return Array.from(aliases);
+}
+
+export function getAppleMusicCountryName(value: string | null | undefined, locale = 'en') {
+  const regionCode = getAppleMusicCountryRegionCode(value);
+  if (!regionCode) return null;
+
+  try {
+    const displayNames = new Intl.DisplayNames([locale], { type: 'region' });
+    return displayNames.of(regionCode) ?? regionCode;
+  } catch {
+    return regionCode;
+  }
 }

@@ -1,0 +1,63 @@
+name: Apple Music Global Crawl
+
+on:
+  schedule:
+    - cron: '20 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-music-global-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl-apple-music-global:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Asia/Shanghai
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Resolve Chrome path
+        shell: bash
+        run: |
+          CHROME_PATH="$(which google-chrome || which google-chrome-stable || which chrome || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo "Chrome executable not found in PATH" >&2
+            exit 1
+          fi
+          echo "APPLE_MUSIC_BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Crawl Apple Music global playlist
+        run: pnpm crawl:apple-music:top-songs:global -- --timeout-ms=60000 --wait-after-load-ms=1500 --diagnostics-file=.tmp/apple-music-global-crawl.json
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-music-global-diagnostics
+          path: .tmp/apple-music-global-crawl.json
+          if-no-files-found: ignore

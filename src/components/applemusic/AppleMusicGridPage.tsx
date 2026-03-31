@@ -10,7 +10,7 @@ interface AppleMusicGridPageProps {
   country: string;
   countries: AppleMusicCountryOption[];
   items: AppleMusicChartItem[];
-  fetchedAt: string;
+  fetchedAt: string | null;
   chartEndDate: string;
   sourceUrl: string;
   itemCount: number;

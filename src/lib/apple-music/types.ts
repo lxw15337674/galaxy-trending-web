@@ -1,11 +1,11 @@
-import { DEFAULT_YOUTUBE_MUSIC_DAILY_COUNTRY_CODES } from '@/lib/youtube-music/types';
-
 export const APPLE_MUSIC_TOP_SONGS_CHART_TYPE = 'tracks';
 export const APPLE_MUSIC_DAILY_PERIOD_TYPE = 'daily';
 export const APPLE_MUSIC_GLOBAL_COUNTRY_CODE = 'global';
 export const APPLE_MUSIC_GLOBAL_COUNTRY_NAME = 'Global';
 export const APPLE_MUSIC_TOP_SONGS_INDEX_URL = 'https://music.apple.com/us/new/top-charts/daily-global-top-charts';
-export const DEFAULT_APPLE_MUSIC_TOP_SONGS_COUNTRY_CODES = DEFAULT_YOUTUBE_MUSIC_DAILY_COUNTRY_CODES;
+export const APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE = 'rss.marketingtools.apple.com';
+export const APPLE_MUSIC_GLOBAL_PLAYLIST_SOURCE_TYPE = 'music.apple.com.playlist';
+export const DEFAULT_APPLE_MUSIC_TOP_SONGS_COUNTRY_CODES = ['US', 'JP'] as const;
 
 export interface AppleMusicCountryOption {
   countryCode: string;

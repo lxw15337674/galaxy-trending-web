@@ -230,7 +230,7 @@ const messages = {
       errorQueryFailed: '读取 Apple Music 榜单失败，请稍后重试。',
       errorLoad: '加载 Apple Music 榜单失败，请稍后重试。',
       cardNoThumbnail: '无缩略图',
-      cardChartDate: '榜单日期',
+      cardChartDate: '快照日期',
     },
     xTrending: {
       metadataTitle: 'X热搜',
@@ -536,7 +536,7 @@ const messages = {
       cardPreviousRank: 'Yesterday',
       cardNewEntry: 'New',
       cardDaysOnChart: 'days',
-      cardChartDate: 'Chart date',
+      cardChartDate: 'Snapshot date',
       cardGlobal: 'Global',
     },
     youtubeMusicShortsDaily: {
@@ -895,7 +895,7 @@ const messages = {
       cardPreviousRank: 'Ayer',
       cardNewEntry: 'Nuevo',
       cardDaysOnChart: 'días',
-      cardChartDate: 'Fecha',
+      cardChartDate: 'Fecha de captura',
       cardGlobal: 'Global',
     },
     youtubeMusicShortsDaily: {
@@ -1254,7 +1254,7 @@ const messages = {
       cardPreviousRank: '前日',
       cardNewEntry: '新登場',
       cardDaysOnChart: '日',
-      cardChartDate: '日付',
+      cardChartDate: '取得日',
       cardGlobal: 'Global',
     },
     youtubeMusicShortsDaily: {

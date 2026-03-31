@@ -30,7 +30,7 @@ interface AppleMusicChartScaffoldProps {
   t: AppleMusicChartScaffoldMessages;
   country: string;
   countries: AppleMusicCountryOption[];
-  fetchedAt: string;
+  fetchedAt: string | null;
   sourceUrl: string;
   errorMessage?: string | null;
   jsonLd?: unknown;
@@ -109,9 +109,11 @@ export function AppleMusicChartScaffold({
                 />
               </div>
 
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 sm:ml-auto sm:self-end">
-                {t.updatedAtLabel} {formatRelativeUpdate(fetchedAt, locale)}
-              </span>
+              {fetchedAt ? (
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 sm:ml-auto sm:self-end">
+                  {t.updatedAtLabel} {formatRelativeUpdate(fetchedAt, locale)}
+                </span>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="hidden" />

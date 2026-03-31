@@ -6,11 +6,14 @@ import {
   normalizeAppleMusicCountryCode,
 } from './countries';
 import { dedupeAppleMusicItemsByRank } from './save-utils';
-import type {
-  AppleMusicChartItem,
-  AppleMusicCountryOption,
-  AppleMusicTopSongsSnapshot,
-  AppleMusicTopSongsSnapshotWithItems,
+import {
+  APPLE_MUSIC_GLOBAL_COUNTRY_CODE,
+  APPLE_MUSIC_GLOBAL_PLAYLIST_SOURCE_TYPE,
+  APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE,
+  type AppleMusicChartItem,
+  type AppleMusicCountryOption,
+  type AppleMusicTopSongsSnapshot,
+  type AppleMusicTopSongsSnapshotWithItems,
 } from './types';
 
 interface SnapshotIdRow {
@@ -194,7 +197,16 @@ export async function listLatestAppleMusicTopSongsCountries(): Promise<AppleMusi
       chart_end_date as chartEndDate,
       fetched_at as fetchedAt
     FROM apple_music_chart_snapshots
-    WHERE chart_type = 'tracks' AND period_type = 'daily' AND status = 'success'
+    WHERE chart_type = 'tracks'
+      AND period_type = 'daily'
+      AND status = 'success'
+      AND (
+        json_extract(raw_payload, '$.sourceType') = ${APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE}
+        OR (
+          country_code = ${APPLE_MUSIC_GLOBAL_COUNTRY_CODE}
+          AND json_extract(raw_payload, '$.sourceType') = ${APPLE_MUSIC_GLOBAL_PLAYLIST_SOURCE_TYPE}
+        )
+      )
     ORDER BY chart_end_date DESC, fetched_at DESC, id DESC
   `);
 
@@ -251,6 +263,11 @@ export async function getLatestAppleMusicTopSongsSnapshot(
       AND period_type = 'daily'
       AND country_code IN (${aliasSql})
       AND status = 'success'
+      AND json_extract(raw_payload, '$.sourceType') = ${
+        normalizedCountryCode === APPLE_MUSIC_GLOBAL_COUNTRY_CODE
+          ? APPLE_MUSIC_GLOBAL_PLAYLIST_SOURCE_TYPE
+          : APPLE_MUSIC_TOP_SONGS_SOURCE_TYPE
+      }
     ORDER BY chart_end_date DESC, fetched_at DESC, id DESC
     LIMIT 1
   `);

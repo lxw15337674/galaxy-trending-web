@@ -12,7 +12,7 @@ export interface AppleMusicPageData {
   countryName: string;
   countries: AppleMusicCountryOption[];
   items: AppleMusicChartItem[];
-  fetchedAt: string;
+  fetchedAt: string | null;
   chartEndDate: string;
   sourceUrl: string;
   playlistTitle: string;
@@ -34,11 +34,10 @@ export async function buildAppleMusicPageData(
   locale: Locale,
 ): Promise<AppleMusicPageData> {
   const t = getMessages(locale).appleMusic;
-  const fallbackNow = new Date().toISOString();
   let country = 'global';
   let countryName = '';
   let countries: AppleMusicCountryOption[] = [];
-  let fetchedAt = fallbackNow;
+  let fetchedAt: string | null = null;
   let chartEndDate = '';
   let sourceUrl = '';
   let playlistTitle = '';
@@ -48,9 +47,10 @@ export async function buildAppleMusicPageData(
 
   try {
     countries = await listLatestAppleMusicTopSongsCountries();
+    const fallbackCountry = countries.find((item) => item.countryCode === 'global')?.countryCode ?? countries[0]?.countryCode ?? 'global';
 
     const requestedCountry = normalizeCountryValue(readSearchParamRaw(rawSearchParams, 'country'));
-    country = countries.some((item) => item.countryCode === requestedCountry) ? requestedCountry : 'global';
+    country = countries.some((item) => item.countryCode === requestedCountry) ? requestedCountry : fallbackCountry;
     const snapshot = await getLatestAppleMusicTopSongsSnapshot(country);
 
     if (!snapshot) {
