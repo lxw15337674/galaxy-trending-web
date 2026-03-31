@@ -629,6 +629,60 @@ async function extractDomTracks(page: Page, selector: 'track-lockup' | 'song-lin
         },
       };
     };
+    const countRankLines = (element) => {
+      const lines = element.innerText.split('\\n').map((line) => cleanText(line)).filter(Boolean);
+      return lines.filter((line) => /^\\d{1,3}$/.test(line) && Number(line) >= 1 && Number(line) <= 100).length;
+    };
+    const findRowContainerForRank = (element) => {
+      let current = element.parentElement;
+      while (current && current !== document.body) {
+        const rankLineCount = countRankLines(current);
+        if (rankLineCount === 1) {
+          const lines = current.innerText.split('\\n').map((line) => cleanText(line)).filter(Boolean);
+          if (lines.length >= 5) {
+            return current;
+          }
+        }
+        current = current.parentElement;
+      }
+      return element.parentElement ?? element;
+    };
+    const extractByRankRows = () => {
+      const rankElements = Array.from(document.querySelectorAll('*')).filter((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        if (node.children.length > 0) return false;
+        const text = cleanText(node.innerText);
+        if (!/^\\d{1,3}$/.test(text)) return false;
+        const rank = Number(text);
+        return Number.isFinite(rank) && rank >= 1 && rank <= 100;
+      });
+      const rowsByRank = new Map();
+      rankElements.forEach((rankElement) => {
+        const rank = Number(cleanText(rankElement.innerText));
+        if (rowsByRank.has(rank)) {
+          return;
+        }
+        const row = findRowContainerForRank(rankElement);
+        const candidate = extractCandidate(row, rank - 1);
+        const lines = row.innerText.split('\\n').map((line) => cleanText(line)).filter(Boolean);
+        const rankIndex = lines.findIndex((line) => line === String(rank));
+        if (rankIndex > 0) {
+          candidate.trackName = lines[rankIndex - 1] || candidate.trackName;
+        }
+        if (!candidate.artistNames.length && rankIndex >= 0 && lines[rankIndex + 1]) {
+          candidate.artistNames = unique(lines[rankIndex + 1].split(',').map((part) => cleanText(part)));
+        }
+        candidate.rank = rank;
+        rowsByRank.set(rank, candidate);
+      });
+      return Array.from(rowsByRank.entries())
+        .sort((left, right) => left[0] - right[0])
+        .map((entry) => entry[1]);
+    };
+    const rankRowCandidates = extractByRankRows();
+    if (rankRowCandidates.length >= 90) {
+      return rankRowCandidates;
+    }
     if (requestedSelector === 'track-lockup') {
       return Array.from(document.querySelectorAll('[data-testid="track-lockup"]')).map((node, index) => extractCandidate(node, index));
     }
