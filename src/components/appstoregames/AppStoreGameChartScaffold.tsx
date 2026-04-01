@@ -2,23 +2,20 @@
 
 import type { ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Check, ChevronDown } from 'lucide-react';
 import { RankingFilterField } from '@/components/rankings/RankingFilterField';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { type ComboboxOption } from '@/components/ui/combobox';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Locale } from '@/i18n/config';
 import { formatRelativeUpdate } from '@/i18n/format';
 import { getLocalizedAppStoreGameCountryLabel } from '@/lib/app-store-games/labels';
-import type { AppStoreGameChartOption, AppStoreGameCountryOption } from '@/lib/app-store-games/types';
-import { normalizeAppStoreGameChartType, normalizeAppStoreGameCountryCode } from '@/lib/app-store-games/types';
+import type { AppStoreGameCountryOption } from '@/lib/app-store-games/types';
+import { normalizeAppStoreGameCountryCode } from '@/lib/app-store-games/types';
 import { createRegionDisplayNames } from '@/lib/youtube-hot/labels';
 
 interface AppStoreGameChartScaffoldMessages {
   title: string;
   subtitle: string;
-  chartSelectorLabel: string;
   filterCountryLabel: string;
   filterCountrySearchPlaceholder: string;
   filterNoMatch: string;
@@ -31,8 +28,6 @@ interface AppStoreGameChartScaffoldMessages {
 interface AppStoreGameChartScaffoldProps {
   locale: Locale;
   t: AppStoreGameChartScaffoldMessages;
-  chartType: string;
-  charts: AppStoreGameChartOption[];
   country: string;
   countries: AppStoreGameCountryOption[];
   fetchedAt: string | null;
@@ -47,8 +42,6 @@ const PAGE_SECTION_CLASS = 'mx-auto w-full px-4 pt-6 md:px-6 md:pt-8 lg:w-[80%]'
 export function AppStoreGameChartScaffold({
   locale,
   t,
-  chartType,
-  charts,
   country,
   countries,
   fetchedAt,
@@ -69,19 +62,6 @@ export function AppStoreGameChartScaffold({
       keywords: [item.countryCode, item.countryName, label],
     };
   });
-
-  const updateChart = (nextChart: string) => {
-    const normalizedChart = normalizeAppStoreGameChartType(nextChart);
-    const next = new URLSearchParams(searchParams.toString());
-    if (normalizedChart === 'topfree') {
-      next.delete('chart');
-    } else {
-      next.set('chart', normalizedChart);
-    }
-
-    const query = next.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  };
 
   const updateCountry = (nextCountry: string) => {
     const normalizedCountry = normalizeAppStoreGameCountryCode(nextCountry);
@@ -117,29 +97,6 @@ export function AppStoreGameChartScaffold({
         <Card className="border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
           <CardHeader className="p-2 md:p-3">
             <div className="flex flex-wrap items-end gap-2">
-              <div className="w-full min-[360px]:w-[220px] sm:w-[240px]">
-                <div className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">{t.chartSelectorLabel}</div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-10 w-full justify-between">
-                      <span className="truncate">{charts.find((item) => item.chartType === chartType)?.chartLabel ?? charts[0]?.chartLabel}</span>
-                      <ChevronDown className="size-4 opacity-60" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-[220px]">
-                    {charts.map((item) => {
-                      const isActive = item.chartType === chartType;
-                      return (
-                        <DropdownMenuItem key={item.chartType} onClick={() => updateChart(item.chartType)}>
-                          <span>{item.chartLabel}</span>
-                          {isActive ? <Check className="ml-auto size-4" /> : null}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
               <div className="w-full min-[360px]:w-[260px] xl:w-[300px]">
                 <RankingFilterField
                   label={t.filterCountryLabel}

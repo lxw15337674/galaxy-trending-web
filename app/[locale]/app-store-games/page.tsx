@@ -31,7 +31,6 @@ export async function generateMetadata({ params, searchParams }: AppStoreGamesPa
   const pageData = await buildAppStoreGamesPageData(resolvedSearchParams, locale);
 
   return buildAppStoreGamesMetadata(locale, {
-    chartType: pageData.chartType,
     countryCode: pageData.country,
     countryName: pageData.countryName,
   });
@@ -44,8 +43,7 @@ export default async function AppStoreGamesPage({ params, searchParams }: AppSto
   ]);
   const locale = resolveLocale(requestedLocale);
   const pageData = await buildAppStoreGamesPageData(resolvedSearchParams, locale);
-  const jsonLd = buildAppStoreGamesJsonLd(locale, pageData.items, {
-    chartType: pageData.chartType,
+  const jsonLd = buildAppStoreGamesJsonLd(locale, pageData.sections.flatMap((section) => section.items), {
     countryCode: pageData.country,
     countryName: pageData.countryName,
   });

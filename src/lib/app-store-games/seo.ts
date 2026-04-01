@@ -4,8 +4,8 @@ import { getIntlLocale } from '@/i18n/locale-meta';
 import { buildLocaleAlternates } from '@/lib/seo/locale-alternates';
 import { toAbsoluteUrl } from '@/lib/seo/site-origin';
 import { getLocalizedAppStoreGameCountryLabel } from './labels';
-import type { AppStoreGameChartItem, AppStoreGameChartType } from './types';
-import { normalizeAppStoreGameChartType, normalizeAppStoreGameCountryCode } from './types';
+import type { AppStoreGameChartItem } from './types';
+import { normalizeAppStoreGameCountryCode } from './types';
 
 const APP_STORE_GAMES_METADATA_TEXT: Record<Locale, { title: string; description: string; keywords: string[] }> = {
   en: {
@@ -30,27 +30,6 @@ const APP_STORE_GAMES_METADATA_TEXT: Record<Locale, { title: string; description
   },
 };
 
-function getLocalizedChartLabel(locale: Locale, chartType: AppStoreGameChartType) {
-  if (locale === 'zh') {
-    if (chartType === 'toppaid') return '付费榜';
-    if (chartType === 'topgrossing') return '畅销榜';
-    return '免费榜';
-  }
-  if (locale === 'es') {
-    if (chartType === 'toppaid') return 'Top Paid';
-    if (chartType === 'topgrossing') return 'Top Grossing';
-    return 'Top Free';
-  }
-  if (locale === 'ja') {
-    if (chartType === 'toppaid') return '有料';
-    if (chartType === 'topgrossing') return '売上上位';
-    return '無料';
-  }
-  if (chartType === 'toppaid') return 'Top Paid';
-  if (chartType === 'topgrossing') return 'Top Grossing';
-  return 'Top Free';
-}
-
 function buildCountryDescriptionSuffix(locale: Locale, countryLabel: string) {
   if (locale === 'zh') return `当前地区：${countryLabel}。`;
   if (locale === 'es') return `País actual: ${countryLabel}.`;
@@ -58,10 +37,9 @@ function buildCountryDescriptionSuffix(locale: Locale, countryLabel: string) {
   return `Current country: ${countryLabel}.`;
 }
 
-function buildAlternates(chartType: AppStoreGameChartType, countryCode: string) {
+function buildAlternates(countryCode: string) {
   const alternates = buildLocaleAlternates('/app-store-games');
   const next = new URLSearchParams();
-  if (chartType !== 'topfree') next.set('chart', chartType);
   if (countryCode !== 'US') next.set('country', countryCode);
   const query = next.toString();
   if (!query) return alternates;
@@ -69,29 +47,25 @@ function buildAlternates(chartType: AppStoreGameChartType, countryCode: string) 
 }
 
 interface AppStoreGamesMetadataOptions {
-  chartType?: string;
   countryCode?: string;
   countryName?: string;
 }
 
 function resolveMetadataText(locale: Locale, options?: AppStoreGamesMetadataOptions) {
   const base = APP_STORE_GAMES_METADATA_TEXT[locale];
-  const chartType = normalizeAppStoreGameChartType(options?.chartType);
   const countryCode = normalizeAppStoreGameCountryCode(options?.countryCode);
-  const chartLabel = getLocalizedChartLabel(locale, chartType);
   const countryLabel = getLocalizedAppStoreGameCountryLabel(countryCode, options?.countryName, locale);
   const params = new URLSearchParams();
-  if (chartType !== 'topfree') params.set('chart', chartType);
   if (countryCode !== 'US') params.set('country', countryCode);
   const query = params.toString();
   const canonicalPath = query ? `/${locale}/app-store-games?${query}` : `/${locale}/app-store-games`;
 
   return {
-    title: `${base.title} - ${chartLabel} - ${countryLabel}`,
-    description: `${base.description} ${chartLabel}. ${buildCountryDescriptionSuffix(locale, countryLabel)}`,
+    title: `${base.title} - ${countryLabel}`,
+    description: `${base.description} ${buildCountryDescriptionSuffix(locale, countryLabel)}`,
     keywords: base.keywords,
     canonicalPath,
-    alternates: buildAlternates(chartType, countryCode),
+    alternates: buildAlternates(countryCode),
     inLanguage: getIntlLocale(locale),
   };
 }
