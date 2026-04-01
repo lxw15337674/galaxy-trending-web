@@ -9,7 +9,7 @@ export const GOOGLE_PLAY_GAME_CHART_TYPES = [
 
 export type GooglePlayGameChartType = (typeof GOOGLE_PLAY_GAME_CHART_TYPES)[number];
 
-export const DEFAULT_GOOGLE_PLAY_GAME_COUNTRY_CODES = ['US', 'JP', 'KR', 'TW', 'HK'] as const;
+export const DEFAULT_GOOGLE_PLAY_GAME_COUNTRY_CODES = ['CN', 'US', 'JP', 'KR', 'DE', 'GB', 'FR', 'CA', 'BR', 'MX'] as const;
 export const GOOGLE_PLAY_GAME_PAGE_LIMIT = 50;
 
 export interface GooglePlayGameCountryOption {

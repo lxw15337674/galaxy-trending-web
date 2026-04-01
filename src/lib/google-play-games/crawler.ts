@@ -228,7 +228,7 @@ function extractRpcChartItems(responseText: string, sourceUrl: string) {
       const genreTokens = extractGenreTokens(rawEntry[1]);
       const ratingText = ratingValue ? `${ratingValue} stars` : null;
       const priceText = toText(offerInfo?.[1]?.[0]?.[2]);
-      const rawRank = typeof rawEntry[2] === 'number' ? rawEntry[2] + 1 : index + 1;
+      const rawRank = index + 1;
 
       return mapExtractedItem({
         rank: rawRank,
@@ -247,6 +247,7 @@ function extractRpcChartItems(responseText: string, sourceUrl: string) {
           base,
           meta: rawEntry[1] ?? null,
           rankIndex: rawEntry[2] ?? null,
+          listIndex: index,
         },
       });
     })

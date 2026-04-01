@@ -11,7 +11,7 @@ export type AppStoreGameChartType = (typeof APP_STORE_GAME_CHART_TYPES)[number];
 
 export const APP_STORE_GAME_CATEGORY_ID = '6014';
 export const APP_STORE_GAME_CATEGORY_NAME = 'Games';
-export const DEFAULT_APP_STORE_GAME_COUNTRY_CODES = ['US', 'JP', 'KR', 'TW', 'HK'] as const;
+export const DEFAULT_APP_STORE_GAME_COUNTRY_CODES = ['CN', 'US', 'JP', 'KR', 'DE', 'GB', 'FR', 'CA', 'BR', 'MX'] as const;
 export const APP_STORE_GAME_FEED_LIMIT = 100;
 
 export interface AppStoreGameCountryOption {

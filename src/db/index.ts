@@ -61,12 +61,21 @@ function parseUrlHost(value: string) {
   }
 }
 
-const tursoUrlRaw = process.env.TURSO_DATABASE_URL ? sanitizeEnv(process.env.TURSO_DATABASE_URL) : '';
-const tursoUrl = tursoUrlRaw ? normalizeTursoUrl(tursoUrlRaw) : '';
-const tursoAuthToken = process.env.TURSO_AUTH_TOKEN ? sanitizeEnv(process.env.TURSO_AUTH_TOKEN) : '';
-const isDbConfigured = Boolean(tursoUrl);
+function readDbConfig() {
+  const tursoUrlRaw = process.env.TURSO_DATABASE_URL ? sanitizeEnv(process.env.TURSO_DATABASE_URL) : '';
+  const tursoUrl = tursoUrlRaw ? normalizeTursoUrl(tursoUrlRaw) : '';
+  const tursoAuthToken = process.env.TURSO_AUTH_TOKEN ? sanitizeEnv(process.env.TURSO_AUTH_TOKEN) : '';
+
+  return {
+    tursoUrlRaw,
+    tursoUrl,
+    tursoAuthToken,
+    isDbConfigured: Boolean(tursoUrl),
+  };
+}
 
 export function getDbRuntimeInfo() {
+  const { isDbConfigured, tursoUrlRaw, tursoUrl, tursoAuthToken } = readDbConfig();
   return {
     configured: isDbConfigured,
     hasUrl: Boolean(tursoUrlRaw),
@@ -82,24 +91,41 @@ function createMissingDbConfigError() {
   );
 }
 
+let dbInstance: ReturnType<typeof drizzle> | null | undefined;
+
+function getDbInstance() {
+  if (dbInstance !== undefined) {
+    return dbInstance;
+  }
+
+  const { isDbConfigured, tursoUrl, tursoAuthToken } = readDbConfig();
+  dbInstance = isDbConfigured
+    ? drizzle(
+        createClient({
+          url: tursoUrl,
+          authToken: tursoAuthToken || undefined,
+          fetch: runtimeFetch,
+        }),
+      )
+    : null;
+
+  return dbInstance;
+}
+
 const missingDbProxy = new Proxy(
   {},
   {
-    get() {
-      throw createMissingDbConfigError();
+    get(_target, property, receiver) {
+      const instance = getDbInstance();
+      if (!instance) {
+        throw createMissingDbConfigError();
+      }
+
+      const value = Reflect.get(instance as object, property, receiver);
+      return typeof value === 'function' ? value.bind(instance) : value;
     },
   },
 ) as ReturnType<typeof drizzle>;
 
-const dbInstance = isDbConfigured
-  ? drizzle(
-      createClient({
-        url: tursoUrl,
-        authToken: tursoAuthToken || undefined,
-        fetch: runtimeFetch,
-      }),
-    )
-  : null;
-
-export const db = dbInstance ?? missingDbProxy;
+export const db = missingDbProxy;
 export default db;
