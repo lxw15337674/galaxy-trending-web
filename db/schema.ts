@@ -297,6 +297,67 @@ export const spotifyChartItems = sqliteTable(
   }),
 );
 
+export const steamChartSnapshots = sqliteTable(
+  'steam_chart_snapshots',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    chartType: text('chart_type').notNull(),
+    scopeCode: text('scope_code').notNull(),
+    scopeName: text('scope_name').notNull(),
+    snapshotHour: text('snapshot_hour').notNull(),
+    fetchedAt: text('fetched_at').notNull(),
+    sourceUrl: text('source_url').notNull(),
+    chartLabel: text('chart_label').notNull(),
+    status: text('status').notNull().default('success'),
+    itemCount: integer('item_count').notNull().default(0),
+    errorText: text('error_text'),
+    rawPayload: text('raw_payload'),
+    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    chartSnapshotUnique: uniqueIndex('idx_steam_chart_snapshots_unique').on(
+      table.chartType,
+      table.scopeCode,
+      table.snapshotHour,
+    ),
+    chartLatestIdx: index('idx_steam_chart_snapshots_latest').on(table.chartType, table.scopeCode, table.snapshotHour),
+    statusIdx: index('idx_steam_chart_snapshots_status').on(table.status, table.snapshotHour),
+  }),
+);
+
+export const steamChartItems = sqliteTable(
+  'steam_chart_items',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    snapshotId: integer('snapshot_id')
+      .notNull()
+      .references(() => steamChartSnapshots.id, { onDelete: 'cascade' }),
+    rank: integer('rank').notNull(),
+    steamItemId: text('steam_item_id').notNull(),
+    steamAppId: integer('steam_app_id'),
+    gameName: text('game_name').notNull(),
+    steamUrl: text('steam_url').notNull(),
+    thumbnailUrl: text('thumbnail_url'),
+    currentPlayers: integer('current_players'),
+    peakToday: integer('peak_today'),
+    priceText: text('price_text'),
+    originalPriceText: text('original_price_text'),
+    discountPercent: integer('discount_percent'),
+    releaseDateText: text('release_date_text'),
+    tagSummary: text('tag_summary'),
+    rawItemJson: text('raw_item_json'),
+    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    snapshotRankUnique: uniqueIndex('idx_steam_chart_items_snapshot_rank').on(table.snapshotId, table.rank),
+    snapshotItemUnique: uniqueIndex('idx_steam_chart_items_snapshot_item').on(table.snapshotId, table.steamItemId),
+    snapshotIdx: index('idx_steam_chart_items_snapshot').on(table.snapshotId),
+    appIdx: index('idx_steam_chart_items_app').on(table.steamAppId),
+    gameIdx: index('idx_steam_chart_items_game').on(table.gameName),
+  }),
+);
+
 export const youtubeMusicVideoDailySnapshots = sqliteTable(
   'youtube_music_video_daily_snapshots',
   {
@@ -718,6 +779,10 @@ export type SpotifyChartSnapshot = typeof spotifyChartSnapshots.$inferSelect;
 export type NewSpotifyChartSnapshot = typeof spotifyChartSnapshots.$inferInsert;
 export type SpotifyChartItem = typeof spotifyChartItems.$inferSelect;
 export type NewSpotifyChartItem = typeof spotifyChartItems.$inferInsert;
+export type SteamChartSnapshot = typeof steamChartSnapshots.$inferSelect;
+export type NewSteamChartSnapshot = typeof steamChartSnapshots.$inferInsert;
+export type SteamChartItem = typeof steamChartItems.$inferSelect;
+export type NewSteamChartItem = typeof steamChartItems.$inferInsert;
 export type YouTubeMusicVideoDailySnapshot = typeof youtubeMusicVideoDailySnapshots.$inferSelect;
 export type NewYouTubeMusicVideoDailySnapshot = typeof youtubeMusicVideoDailySnapshots.$inferInsert;
 export type YouTubeMusicVideoDailyItem = typeof youtubeMusicVideoDailyItems.$inferSelect;

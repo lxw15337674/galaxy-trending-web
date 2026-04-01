@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next';
 import { LOCALES } from '@/i18n/config';
 import { getLatestSpotifyTopSongsGlobalSnapshot } from '@/lib/spotify/db';
+import { getLatestSteamMostPlayedSnapshot } from '@/lib/steam/db';
 import { getLatestPublishedTikTokHashtagBatch } from '@/lib/tiktok-hashtag-trends/db';
 import { getLatestPublishedXTrendBatch } from '@/lib/x-trends/db';
 import { getLatestPublishedBatch } from '@/lib/youtube-hot/db';
@@ -24,6 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let musicShortsDailyLastModified = now;
   let liveLastModified = now;
   let spotifyLastModified = now;
+  let steamLastModified = now;
   let xTrendingLastModified = now;
   let tiktokTrendingLastModified = now;
 
@@ -67,6 +69,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     spotifyLastModified = toValidDate(latestSpotifySnapshot?.fetchedAt, now);
   } catch {
     spotifyLastModified = now;
+  }
+
+  try {
+    const latestSteamSnapshot = await getLatestSteamMostPlayedSnapshot();
+    steamLastModified = toValidDate(latestSteamSnapshot?.fetchedAt, now);
+  } catch {
+    steamLastModified = now;
   }
 
   try {
@@ -124,6 +133,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: toAbsoluteUrl(`/${locale}/spotify`),
       lastModified: spotifyLastModified,
       changeFrequency: 'daily' as const,
+      priority: locale === 'en' ? 0.8 : 0.7,
+    },
+    {
+      url: toAbsoluteUrl(`/${locale}/steam`),
+      lastModified: steamLastModified,
+      changeFrequency: 'hourly' as const,
       priority: locale === 'en' ? 0.8 : 0.7,
     },
     {

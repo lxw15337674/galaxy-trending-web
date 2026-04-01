@@ -38,6 +38,7 @@ function isLocaleSwitchablePath(barePath: string) {
     barePath.startsWith('/youtube-music') ||
     barePath.startsWith('/apple-music') ||
     barePath.startsWith('/spotify') ||
+    barePath.startsWith('/steam') ||
     barePath === '/youtube-live' ||
     barePath === '/x-trending' ||
     barePath === '/tiktok-trending' ||
@@ -82,6 +83,12 @@ function SiteHeaderFrame({
       href: withLocalePrefix('/spotify', locale),
       label: t.navSpotify,
       mobileLabel: t.navSpotifyShort,
+    },
+    {
+      path: '/steam',
+      href: withLocalePrefix('/steam', locale),
+      label: t.navSteam,
+      mobileLabel: t.navSteamShort,
     },
     {
       path: '/youtube-live',
