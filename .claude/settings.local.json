@@ -3,7 +3,11 @@
     "allow": [
       "Bash(opencode --version 2>/dev/null || opencode version 2>/dev/null || echo \"version unknown\")",
       "Read(//c/Users/40417/.config/opencode/**)",
-      "Read(//c/Users/40417/**)"
+      "Read(//c/Users/40417/**)",
+      "Bash(ls:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm --silent run db:inspect)",
+      "Bash(pnpm tsx:*)"
     ]
   }
 }
