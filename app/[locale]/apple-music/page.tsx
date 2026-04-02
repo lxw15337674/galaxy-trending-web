@@ -1,27 +1,16 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-
-interface AppleMusicRedirectProps {
-  params: Promise<{ locale: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}
+import {
+  generateMusicRouteMetadata,
+  renderMusicRoute,
+  type MusicPageProps,
+} from '../music/shared';
 
 export const revalidate = 600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: 'Redirecting...',
-  };
+export async function generateMetadata({ params, searchParams }: MusicPageProps): Promise<Metadata> {
+  return generateMusicRouteMetadata({ params, searchParams }, 'apple-music');
 }
 
-export default async function AppleMusicRedirect({ params, searchParams }: AppleMusicRedirectProps) {
-  const [{ locale }, resolvedSearchParams] = await Promise.all([
-    params,
-    searchParams ?? Promise.resolve(undefined),
-  ]);
-
-  const country = resolvedSearchParams?.country;
-  const query = country ? `?type=apple-music&country=${country}` : '?type=apple-music';
-
-  redirect(`/${locale}/music${query}`);
+export default async function AppleMusicPage({ params, searchParams }: MusicPageProps) {
+  return renderMusicRoute({ params, searchParams }, 'apple-music');
 }

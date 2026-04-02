@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { RankingFilterField } from '@/components/rankings/RankingFilterField';
-import type { Locale } from '@/i18n/config';
 import { formatRelativeUpdate } from '@/i18n/format';
 import { getMessages } from '@/i18n/messages';
 import { createRegionDisplayNames } from '@/lib/youtube-hot/labels';

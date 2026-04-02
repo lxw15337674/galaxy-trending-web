@@ -23,7 +23,6 @@ export interface MusicPageData {
   country: string;
   countryName: string;
   countries: Array<{ countryCode: string; countryName: string }>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   items: any[];
   fetchedAt: string | null;
   chartEndDate: string;

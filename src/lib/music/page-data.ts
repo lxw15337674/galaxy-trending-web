@@ -56,7 +56,6 @@ export async function buildMusicPageData(
     country: 'global',
     countryName: '',
     countries: [],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: [],
     fetchedAt: null,
     chartEndDate: '',

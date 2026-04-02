@@ -6,7 +6,6 @@ import { YouTubeMusicShortsSongCard } from '@/components/youtubehot/YouTubeMusic
 import { AppleMusicTrackCard } from '@/components/applemusic/AppleMusicTrackCard';
 import { SpotifyTrackCard } from '@/components/spotify/SpotifyTrackCard';
 import { MusicChartScaffold } from './MusicChartScaffold';
-import type { Locale } from '@/i18n/config';
 import type { MusicPageData } from '@/lib/music/types';
 
 interface MusicChartPageProps extends MusicPageData {

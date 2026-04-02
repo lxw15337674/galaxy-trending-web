@@ -1,30 +1,19 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-
-interface YouTubeMusicVideosDailyRedirectProps {
-  params: Promise<{ locale: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}
+import {
+  generateMusicRouteMetadata,
+  renderMusicRoute,
+  type MusicPageProps,
+} from '../../music/shared';
 
 export const revalidate = 600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: 'Redirecting...',
-  };
+export async function generateMetadata({ params, searchParams }: MusicPageProps): Promise<Metadata> {
+  return generateMusicRouteMetadata({ params, searchParams }, 'youtube-music-videos-daily');
 }
 
-export default async function YouTubeMusicVideosDailyRedirect({
+export default async function YouTubeMusicVideosDailyPage({
   params,
   searchParams,
-}: YouTubeMusicVideosDailyRedirectProps) {
-  const [{ locale }, resolvedSearchParams] = await Promise.all([
-    params,
-    searchParams ?? Promise.resolve(undefined),
-  ]);
-
-  const country = resolvedSearchParams?.country;
-  const query = country ? `?type=youtube-music-videos-daily&country=${country}` : '?type=youtube-music-videos-daily';
-
-  redirect(`/${locale}/music${query}`);
+}: MusicPageProps) {
+  return renderMusicRoute({ params, searchParams }, 'youtube-music-videos-daily');
 }

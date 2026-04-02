@@ -68,10 +68,10 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       description: messages.home.trendingDescription,
     },
     {
-      href: `/${locale}/youtube-music`,
-      platform: 'YouTube Music',
-      label: messages.common.navYouTubeMusic,
-      description: messages.home.musicDescription,
+      href: `/${locale}/music`,
+      platform: 'YouTube Music / Apple Music / Spotify',
+      label: messages.music.title,
+      description: messages.music.description,
     },
     {
       href: `/${locale}/twitch-live`,
@@ -88,13 +88,13 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
     {
       href: `/${locale}/apple-music`,
       platform: 'Apple Music',
-      label: messages.common.navAppleMusic,
+      label: messages.appleMusic.title,
       description: messages.home.appleMusicDescription,
     },
     {
       href: `/${locale}/spotify`,
       platform: 'Spotify',
-      label: messages.common.navSpotify,
+      label: messages.spotify.title,
       description: messages.home.spotifyDescription,
     },
     {
