@@ -37,6 +37,19 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Resolve Chrome path
+        shell: bash
+        run: |
+          CHROME_PATH="$(which google-chrome || which google-chrome-stable || which chrome || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo "Chrome executable not found in PATH" >&2
+            exit 1
+          fi
+          echo "X_TREND_BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

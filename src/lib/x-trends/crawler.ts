@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Response } from 'playwright-core';
 import { resolveXTrendStorageState } from './cookie-provider';
 import {
