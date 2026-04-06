@@ -48,6 +48,55 @@ interface SnapshotDatasetSpec {
   scrubItemColumns?: string[];
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableDbError(error: unknown) {
+  const patterns = [/fetch failed/i, /headers timeout/i, /UND_ERR_HEADERS_TIMEOUT/i, /ECONNRESET/i, /socket hang up/i];
+
+  let current: unknown = error;
+  for (let i = 0; i < 8 && current; i += 1) {
+    const value = current as {
+      message?: unknown;
+      code?: unknown;
+      stack?: unknown;
+      cause?: unknown;
+    };
+
+    const text = [value.message, value.code, value.stack, String(current)].filter(Boolean).join(' | ');
+    if (patterns.some((pattern) => pattern.test(text))) {
+      return true;
+    }
+
+    current = value.cause;
+  }
+
+  return false;
+}
+
+async function withDbRetry<T>(operationName: string, fn: () => Promise<T>) {
+  const maxAttempts = 4;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isRetryableDbError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+
+      const delayMs = attempt * 1000;
+      console.warn(
+        `Transient DB error during ${operationName}, retrying attempt ${attempt + 1}/${maxAttempts} after ${delayMs}ms`,
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error(`Unexpected retry flow for operation ${operationName}`);
+}
+
 function parsePositiveInt(value: string | undefined, fallback: number, min: number, max: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -67,8 +116,8 @@ function parseCliArgs(): CliOptions {
     return spacedArgIndex >= 0 ? args[spacedArgIndex + 1] ?? eqArg : eqArg;
   };
 
-  const deleteDays = parsePositiveInt(parseOption('delete-days') ?? parseOption('days'), 30, 1, 3650);
-  const scrubDays = parsePositiveInt(parseOption('scrub-days'), 7, 1, 3650);
+  const deleteDays = parsePositiveInt(parseOption('delete-days') ?? parseOption('days'), 7, 1, 3650);
+  const scrubDays = parsePositiveInt(parseOption('scrub-days'), 1, 1, 3650);
 
   if (scrubDays >= deleteDays) {
     throw new Error(`Invalid retention window: scrubDays=${scrubDays} must be smaller than deleteDays=${deleteDays}.`);
@@ -82,12 +131,12 @@ function sqlString(value: string) {
 }
 
 async function queryCount(executor: QueryExecutor, query: string) {
-  const rows = await executor.all<{ total: number }>(sql.raw(query));
+  const rows = await withDbRetry('queryCount', () => executor.all<{ total: number }>(sql.raw(query)));
   return Number(rows[0]?.total ?? 0);
 }
 
 async function execute(executor: QueryExecutor, query: string) {
-  await executor.run(sql.raw(query));
+  await withDbRetry('execute', () => executor.run(sql.raw(query)));
 }
 
 function buildNullCheck(alias: string, columns: string[]) {
@@ -107,6 +156,7 @@ async function purgeBatchDataset(
   },
   applyChanges: boolean,
 ) {
+  const shouldCount = !applyChanges;
   const scrubWindowCondition = [
     `b.${spec.batchDateColumn} < ${sqlString(cutoffs.scrubHour)}`,
     `b.${spec.batchDateColumn} >= ${sqlString(cutoffs.deleteHour)}`,
@@ -114,7 +164,7 @@ async function purgeBatchDataset(
   const deleteCondition = `b.${spec.batchDateColumn} < ${sqlString(cutoffs.deleteHour)}`;
 
   const scrubbedSnapshots =
-    spec.scrubSnapshotColumns?.length
+    shouldCount && spec.scrubSnapshotColumns?.length
       ? await queryCount(
           executor,
           `
@@ -145,7 +195,7 @@ async function purgeBatchDataset(
   }
 
   const scrubbedItems =
-    spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
+    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
       ? await queryCount(
           executor,
           `
@@ -193,15 +243,17 @@ async function purgeBatchDataset(
   );
   const deletedSnapshots = await queryCount(
     executor,
-    `
-      SELECT COUNT(*) as total
-      FROM ${spec.snapshotTable} s
-      JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
-      WHERE ${deleteCondition}
-    `,
+    shouldCount
+      ? `
+          SELECT COUNT(*) as total
+          FROM ${spec.snapshotTable} s
+          JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
+          WHERE ${deleteCondition}
+        `
+      : `SELECT 0 as total`,
   );
   const deletedItems =
-    spec.itemTable && spec.itemSnapshotIdColumn
+    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn
       ? await queryCount(
           executor,
           `
@@ -240,14 +292,18 @@ async function purgeSnapshotDataset(
   cutoffs: {
     scrubIso: string;
     deleteIso: string;
+    scrubHour: string;
+    deleteHour: string;
     scrubDate: string;
     deleteDate: string;
   },
   applyChanges: boolean,
 ) {
+  const shouldCount = !applyChanges;
   const isDateOnly = spec.snapshotDateColumn.endsWith('_date');
-  const scrubCutoff = isDateOnly ? cutoffs.scrubDate : cutoffs.scrubIso;
-  const deleteCutoff = isDateOnly ? cutoffs.deleteDate : cutoffs.deleteIso;
+  const isHourText = spec.snapshotDateColumn.endsWith('_hour');
+  const scrubCutoff = isDateOnly ? cutoffs.scrubDate : isHourText ? cutoffs.scrubHour : cutoffs.scrubIso;
+  const deleteCutoff = isDateOnly ? cutoffs.deleteDate : isHourText ? cutoffs.deleteHour : cutoffs.deleteIso;
   const scrubWindowCondition = [
     `s.${spec.snapshotDateColumn} < ${sqlString(scrubCutoff)}`,
     `s.${spec.snapshotDateColumn} >= ${sqlString(deleteCutoff)}`,
@@ -255,7 +311,7 @@ async function purgeSnapshotDataset(
   const deleteCondition = `s.${spec.snapshotDateColumn} < ${sqlString(deleteCutoff)}`;
 
   const scrubbedSnapshots =
-    spec.scrubSnapshotColumns?.length
+    shouldCount && spec.scrubSnapshotColumns?.length
       ? await queryCount(
           executor,
           `
@@ -281,7 +337,7 @@ async function purgeSnapshotDataset(
   }
 
   const scrubbedItems =
-    spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
+    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
       ? await queryCount(
           executor,
           `
@@ -319,14 +375,16 @@ async function purgeSnapshotDataset(
 
   const deletedSnapshots = await queryCount(
     executor,
-    `
-      SELECT COUNT(*) as total
-      FROM ${spec.snapshotTable} s
-      WHERE ${deleteCondition}
-    `,
+    shouldCount
+      ? `
+          SELECT COUNT(*) as total
+          FROM ${spec.snapshotTable} s
+          WHERE ${deleteCondition}
+        `
+      : `SELECT 0 as total`,
   );
   const deletedItems =
-    spec.itemTable && spec.itemSnapshotIdColumn
+    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn
       ? await queryCount(
           executor,
           `
@@ -388,6 +446,7 @@ async function main() {
       itemTable: 'youtube_hot_hourly_items',
       itemSnapshotIdColumn: 'snapshot_id',
       scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['description', 'metadata_json'],
     },
     {
       name: 'tiktokVideos',
@@ -454,6 +513,51 @@ async function main() {
       snapshotTable: 'youtube_music_shorts_song_daily_snapshots',
       snapshotDateColumn: 'chart_end_date',
       itemTable: 'youtube_music_shorts_song_daily_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+      scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['raw_item_json'],
+    },
+    {
+      name: 'appleMusic',
+      snapshotTable: 'apple_music_chart_snapshots',
+      snapshotDateColumn: 'chart_end_date',
+      itemTable: 'apple_music_chart_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+      scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['raw_item_json'],
+    },
+    {
+      name: 'spotify',
+      snapshotTable: 'spotify_chart_snapshots',
+      snapshotDateColumn: 'chart_end_date',
+      itemTable: 'spotify_chart_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+      scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['raw_item_json'],
+    },
+    {
+      name: 'steam',
+      snapshotTable: 'steam_chart_snapshots',
+      snapshotDateColumn: 'snapshot_hour',
+      itemTable: 'steam_chart_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+      scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['raw_item_json'],
+    },
+    {
+      name: 'appStoreGames',
+      snapshotTable: 'app_store_game_chart_snapshots',
+      snapshotDateColumn: 'snapshot_hour',
+      itemTable: 'app_store_game_chart_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+      scrubSnapshotColumns: ['raw_payload'],
+      scrubItemColumns: ['raw_item_json'],
+    },
+    {
+      name: 'googlePlayGames',
+      snapshotTable: 'google_play_game_chart_snapshots',
+      snapshotDateColumn: 'snapshot_hour',
+      itemTable: 'google_play_game_chart_items',
       itemSnapshotIdColumn: 'snapshot_id',
       scrubSnapshotColumns: ['raw_payload'],
       scrubItemColumns: ['raw_item_json'],

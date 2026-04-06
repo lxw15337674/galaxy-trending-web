@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm db:purge | tee purge.log
+          pnpm db:purge -- --delete-days=7 --scrub-days=1 | tee purge.log
 
       - name: Write summary
         if: always()
