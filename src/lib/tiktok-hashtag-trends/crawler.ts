@@ -18,6 +18,7 @@ const DEFAULT_WAIT_AFTER_LOAD_MS = 1_000;
 const DEFAULT_LIMIT = 20;
 const DEFAULT_DETAIL_LIMIT = 0;
 const BOOTSTRAP_URL_PREFIX = 'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc';
+const CREATIVE_RADAR_API_PATH = '/creative_radar_api/';
 const FILTERS_API_PATH = '/creative_radar_api/v1/popular_trend/hashtag/filters';
 const DEFAULT_WINDOWS_BROWSER_EXECUTABLE_PATHS = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -230,17 +231,12 @@ function normalizeCountryOptions(response: TikTokFiltersResponse): TikTokHashtag
 async function bootstrapApiAccess(page: Page, locale: string, timeoutMs: number, waitAfterLoadMs: number) {
   let apiHeaders: TikTokHashtagApiHeaders | null = null;
   page.on('request', (request) => {
-    if (!request.url().includes(FILTERS_API_PATH)) return;
+    if (!request.url().includes(CREATIVE_RADAR_API_PATH)) return;
     const capturedHeaders = captureApiHeaders(request.headers());
     if (capturedHeaders) {
       apiHeaders = capturedHeaders;
     }
   });
-
-  const filtersResponsePromise = page.waitForResponse(
-    (response) => response.url().includes(FILTERS_API_PATH) && response.request().method() === 'GET',
-    { timeout: timeoutMs },
-  );
 
   try {
     await page.goto(buildBootstrapUrl(locale), { waitUntil: 'domcontentloaded', timeout: timeoutMs });
@@ -251,14 +247,9 @@ async function bootstrapApiAccess(page: Page, locale: string, timeoutMs: number,
     );
   }
 
-  let filtersResponse;
-  try {
-    filtersResponse = await filtersResponsePromise;
-  } catch (error) {
-    throw new TikTokHashtagCrawlerError(
-      'filters_fetch_failed',
-      `Failed to capture TikTok hashtag filters request: ${toErrorText(error)}`,
-    );
+  const startedAt = Date.now();
+  while (!apiHeaders && Date.now() - startedAt < timeoutMs) {
+    await sleep(250);
   }
 
   if (waitAfterLoadMs > 0) {
@@ -271,10 +262,40 @@ async function bootstrapApiAccess(page: Page, locale: string, timeoutMs: number,
       'TikTok hashtag API headers were not captured from the bootstrap page.',
     );
   }
+  const resolvedApiHeaders = apiHeaders;
+
+  const filtersResponse = await page.evaluate(
+    async (input: { headers: TikTokHashtagApiHeaders; url: string }) => {
+      const apiHeaders = input.headers;
+      const response = await fetch(input.url, {
+        credentials: 'include',
+        headers: {
+          accept: apiHeaders.accept,
+          'anonymous-user-id': apiHeaders.anonymousUserId,
+          lang: apiHeaders.lang,
+          referer: apiHeaders.referer,
+          timestamp: apiHeaders.timestamp,
+          'user-agent': apiHeaders.userAgent,
+          'user-sign': apiHeaders.userSign,
+          ...(apiHeaders.webId ? { 'web-id': apiHeaders.webId } : {}),
+        },
+      });
+
+      const json = (await response.json()) as TikTokFiltersResponse;
+      return {
+        status: response.status,
+        json,
+      };
+    },
+    {
+      headers: resolvedApiHeaders,
+      url: `https://ads.tiktok.com${FILTERS_API_PATH}`,
+    },
+  );
 
   let filtersJson: TikTokFiltersResponse;
   try {
-    filtersJson = (await filtersResponse.json()) as TikTokFiltersResponse;
+    filtersJson = filtersResponse.json;
   } catch (error) {
     throw new TikTokHashtagCrawlerError(
       'filters_fetch_failed',
@@ -282,10 +303,10 @@ async function bootstrapApiAccess(page: Page, locale: string, timeoutMs: number,
     );
   }
 
-  if (filtersJson.code !== 0) {
+  if (filtersResponse.status !== 200 || filtersJson.code !== 0) {
     throw new TikTokHashtagCrawlerError(
       'filters_fetch_failed',
-      `TikTok hashtag filters returned code=${filtersJson.code ?? 'unknown'} msg=${filtersJson.msg ?? 'n/a'}`,
+      `TikTok hashtag filters returned status=${filtersResponse.status} code=${filtersJson.code ?? 'unknown'} msg=${filtersJson.msg ?? 'n/a'}`,
     );
   }
 

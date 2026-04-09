@@ -101,6 +101,14 @@ function logTargetResult(result: TikTokVideoTargetResult) {
   );
 }
 
+function isRecoverableTikTokVideoFailure(result: TikTokVideoTargetResult) {
+  return (
+    result.status === 'failed' &&
+    result.errorCode === 'list_fetch_failed' &&
+    /no available es index/i.test(result.error)
+  );
+}
+
 async function main() {
   const options = parseCliArgs();
   const configuredTargets = loadTikTokVideoTargetsFromEnv();
@@ -174,6 +182,19 @@ async function main() {
     saveSummary,
     results: crawlResult.results,
   });
+
+  if (summary.failedCount === 0) {
+    return;
+  }
+
+  const failedResults = crawlResult.results.filter((result): result is Extract<TikTokVideoTargetResult, { status: 'failed' }> => result.status === 'failed');
+  if (failedResults.length > 0 && failedResults.every(isRecoverableTikTokVideoFailure)) {
+    console.warn(
+      `crawl-tiktok-videos-hourly completed with recoverable upstream failures: failed=${summary.failedCount} source=tiktok-creative-center`,
+    );
+    return;
+  }
+
   exitIfFailures(summary.failedCount);
 }
 

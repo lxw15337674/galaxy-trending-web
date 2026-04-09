@@ -260,9 +260,7 @@ async function updateBatchSummary(batchId: number, targetScopeCount: number) {
   }
 
   const nextStatus =
-    summary.successScopeCount > 0 &&
-    summary.failedScopeCount === 0 &&
-    summary.successScopeCount === targetScopeCount
+    summary.successScopeCount > 0
       ? 'published'
       : 'failed';
   const generatedAt = summary.snapshotHour;
@@ -384,7 +382,7 @@ export async function getLatestCompleteTikTokVideoBatch(): Promise<TikTokVideoLa
 }
 
 export async function listLatestTikTokVideoScopes(): Promise<TikTokVideoScopeFilter[]> {
-  const batch = await getLatestCompleteTikTokVideoBatch();
+  const batch = await getLatestPublishedTikTokVideoBatch();
   if (!batch) return [];
 
   const rows = await db.all<ScopeRow>(sql`
@@ -409,7 +407,7 @@ export async function listLatestTikTokVideoCountries(
   period: number,
   orderBy: TikTokVideoOrderBy,
 ): Promise<TikTokVideoCountryFilter[]> {
-  const batch = await getLatestCompleteTikTokVideoBatch();
+  const batch = await getLatestPublishedTikTokVideoBatch();
   if (!batch) return [];
 
   const rows = await db.all<CountryRow>(sql`
@@ -439,7 +437,7 @@ export async function queryLatestTikTokVideos(params: {
   orderBy: TikTokVideoOrderBy;
 }): Promise<TikTokVideoQueryResult> {
   const normalizedCountryCode = params.countryCode.trim().toUpperCase();
-  const batch = await getLatestCompleteTikTokVideoBatch();
+  const batch = await getLatestPublishedTikTokVideoBatch();
 
   if (!batch) {
     return {

@@ -6,7 +6,7 @@ import { resolvePreferredCode } from '@/lib/page-data/selection-utils';
 import { logServerError } from '@/lib/server/runtime-error';
 import { readSearchParamRaw, type SearchParamsInput } from '@/lib/server/search-params';
 import {
-  getLatestCompleteTikTokVideoBatch,
+  getLatestPublishedTikTokVideoBatch,
   getLatestTikTokVideoBatchHealth,
   listLatestTikTokVideoCountries,
   listLatestTikTokVideoScopes,
@@ -59,7 +59,7 @@ export async function buildTikTokVideoPageData(
 
   try {
     const [batch, scopes] = await Promise.all([
-      getLatestCompleteTikTokVideoBatch(),
+      getLatestPublishedTikTokVideoBatch(),
       listLatestTikTokVideoScopes(),
     ]);
 
