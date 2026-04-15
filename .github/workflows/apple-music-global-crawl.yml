@@ -1,8 +1,8 @@
 name: Apple Music Global Crawl
 
 on:
-  schedule:
-    - cron: '20 */6 * * *'
+  # schedule:
+  #   - cron: '20 */6 * * *'
   workflow_dispatch:
 
 permissions:

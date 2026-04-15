@@ -1,8 +1,8 @@
 name: YouTube Music Shorts Daily Crawl
 
 on:
-  schedule:
-    - cron: '35 4,10,16,22 * * *'
+  # schedule:
+  #   - cron: '35 4,10,16,22 * * *'
   workflow_dispatch:
 
 permissions:
