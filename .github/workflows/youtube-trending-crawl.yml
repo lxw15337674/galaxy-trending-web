@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: youtube-trending-crawl-sixhourly
+  group: turso-db-write-queue
   cancel-in-progress: false
 
 jobs:
@@ -42,4 +42,3 @@ jobs:
 
       - name: Crawl YouTube trending snapshots
         run: pnpm crawl:youtube:trending --no-retry --max-results=100
-

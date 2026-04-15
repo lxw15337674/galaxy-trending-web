@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: app-store-games-crawl
+  group: turso-db-write-queue
   cancel-in-progress: false
 
 jobs:

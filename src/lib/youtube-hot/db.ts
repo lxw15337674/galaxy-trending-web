@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { toBooleanInt, toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
+import { deleteRowsNotInList, negateRanksForSnapshot } from '@/lib/db/hourly-item-diff';
+import { areComparableValuesEqual } from '@/lib/db/snapshot-write-guard';
 import { nowUtcIso } from '@/lib/db/time';
 import {
   type YouTubeCategory,
@@ -63,6 +65,42 @@ interface QueryRow {
   aggregateAvgRank?: number | null;
   aggregateScore?: number | null;
 }
+
+interface SnapshotCompareRow {
+  id: number;
+  regionCode: string;
+  regionName: string;
+  status: 'success' | 'failed';
+  sourceUrl: string;
+  itemCount: number;
+  errorText: string | null;
+}
+
+interface ItemCompareRow {
+  snapshotId: number;
+  rank: number;
+  videoId: string;
+  videoUrl: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  categoryId: string | null;
+  categoryTitle: string | null;
+  publishedAt: string | null;
+  durationIso: string | null;
+  viewCount: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
+  channelId: string;
+  channelTitle: string;
+  channelUrl: string;
+  channelAvatarUrl: string | null;
+  subscriberCount: number | null;
+  hiddenSubscriberCount: number;
+  metadataJson: string | null;
+}
+
+type QueryExecutor = Pick<typeof db, 'all' | 'run'>;
 
 const TRANSIENT_DB_RETRY_MAX_ATTEMPTS = 3;
 const TRANSIENT_DB_RETRY_BASE_DELAY_MS = 300;
@@ -243,9 +281,9 @@ function mapBatchRow(row: BatchMetaRow | undefined | null): YouTubeHotLatestBatc
   };
 }
 
-async function upsertBatch(snapshotHour: string) {
+async function upsertBatch(executor: QueryExecutor, snapshotHour: string) {
   const now = nowUtcIso();
-  const rows = await db.all<BatchIdRow>(sql`
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO youtube_hot_hourly_batches (
       snapshot_hour,
       batch_status,
@@ -273,7 +311,9 @@ async function upsertBatch(snapshotHour: string) {
   return rows[0].id;
 }
 
-async function upsertSnapshot(params: {
+async function upsertSnapshot(
+  executor: QueryExecutor,
+  params: {
   batchId: number;
   regionCode: string;
   regionName: string;
@@ -282,8 +322,9 @@ async function upsertSnapshot(params: {
   itemCount: number;
   errorText: string | null;
   rawPayload: string | null;
-}) {
-  const rows = await db.all<BatchIdRow>(sql`
+},
+) {
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO youtube_hot_hourly_snapshots (
       batch_id,
       region_code,
@@ -337,12 +378,177 @@ async function upsertSnapshot(params: {
   return rows[0].id;
 }
 
+function normalizeYouTubeHotResultForComparison(result: YouTubeHotRegionResult) {
+  if (result.status === 'success') {
+    return {
+      regionCode: result.regionCode,
+      regionName: result.regionName,
+      status: 'success',
+      sourceUrl: result.sourceUrl,
+      items: result.items.map((item) => ({
+        rank: item.rank,
+        videoId: item.videoId,
+        videoUrl: item.videoUrl,
+        title: item.title,
+        description: item.description,
+        thumbnailUrl: item.thumbnailUrl,
+        categoryId: item.categoryId,
+        categoryTitle: item.categoryTitle,
+        publishedAt: item.publishedAt,
+        durationIso: item.durationIso,
+        viewCount: item.viewCount,
+        likeCount: item.likeCount,
+        commentCount: item.commentCount,
+        channelId: item.channelId,
+        channelTitle: item.channelTitle,
+        channelUrl: item.channelUrl,
+        channelAvatarUrl: item.channelAvatarUrl,
+        subscriberCount: item.subscriberCount,
+        hiddenSubscriberCount: item.hiddenSubscriberCount,
+        metadata: item.metadata ?? null,
+      })),
+    };
+  }
+
+  return {
+    regionCode: result.regionCode,
+    regionName: result.regionName,
+    status: 'failed',
+    sourceUrl: result.sourceUrl,
+    errorText: result.error.slice(0, 500),
+  };
+}
+
+async function loadExistingYouTubeHotBatchComparison(snapshotHour: string) {
+  const batchRows = await db.all<BatchIdRow>(sql`
+    SELECT id
+    FROM youtube_hot_hourly_batches
+    WHERE snapshot_hour = ${snapshotHour}
+    LIMIT 1
+  `);
+  const batchId = batchRows[0]?.id;
+  if (!batchId) return null;
+
+  const snapshotRows = await db.all<SnapshotCompareRow>(sql`
+    SELECT
+      id,
+      region_code as regionCode,
+      region_name as regionName,
+      status,
+      source_url as sourceUrl,
+      item_count as itemCount,
+      error_text as errorText
+    FROM youtube_hot_hourly_snapshots
+    WHERE batch_id = ${batchId}
+    ORDER BY region_code ASC
+  `);
+
+  const successSnapshotIds = snapshotRows.filter((row) => row.status === 'success').map((row) => row.id);
+  const itemRows = successSnapshotIds.length
+    ? await db.all<ItemCompareRow>(sql`
+        SELECT
+          snapshot_id as snapshotId,
+          rank,
+          video_id as videoId,
+          video_url as videoUrl,
+          title,
+          description,
+          thumbnail_url as thumbnailUrl,
+          category_id as categoryId,
+          category_title as categoryTitle,
+          published_at as publishedAt,
+          duration_iso as durationIso,
+          view_count as viewCount,
+          like_count as likeCount,
+          comment_count as commentCount,
+          channel_id as channelId,
+          channel_title as channelTitle,
+          channel_url as channelUrl,
+          channel_avatar_url as channelAvatarUrl,
+          subscriber_count as subscriberCount,
+          hidden_subscriber_count as hiddenSubscriberCount,
+          metadata_json as metadataJson
+        FROM youtube_hot_hourly_items
+        WHERE snapshot_id IN (${sql.join(successSnapshotIds.map((id) => sql`${id}`), sql`, `)})
+        ORDER BY snapshot_id ASC, rank ASC
+      `)
+    : [];
+
+  const itemsBySnapshotId = new Map<number, ItemCompareRow[]>();
+  for (const row of itemRows) {
+    const bucket = itemsBySnapshotId.get(row.snapshotId);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      itemsBySnapshotId.set(row.snapshotId, [row]);
+    }
+  }
+
+  return {
+    batchId,
+    results: snapshotRows.map((row) => {
+      if (row.status === 'success') {
+        return {
+          regionCode: row.regionCode,
+          regionName: row.regionName,
+          status: 'success',
+          sourceUrl: row.sourceUrl,
+          items: (itemsBySnapshotId.get(row.id) ?? []).map((item) => ({
+            rank: item.rank,
+            videoId: item.videoId,
+            videoUrl: item.videoUrl,
+            title: item.title,
+            description: item.description,
+            thumbnailUrl: item.thumbnailUrl,
+            categoryId: item.categoryId,
+            categoryTitle: item.categoryTitle,
+            publishedAt: item.publishedAt,
+            durationIso: item.durationIso,
+            viewCount: toNullableNumber(item.viewCount),
+            likeCount: toNullableNumber(item.likeCount),
+            commentCount: toNullableNumber(item.commentCount),
+            channelId: item.channelId,
+            channelTitle: item.channelTitle,
+            channelUrl: item.channelUrl,
+            channelAvatarUrl: item.channelAvatarUrl,
+            subscriberCount: toNullableNumber(item.subscriberCount),
+            hiddenSubscriberCount: toBooleanInt(item.hiddenSubscriberCount),
+            metadata: parseMetadata(item.metadataJson),
+          })),
+        };
+      }
+
+      return {
+        regionCode: row.regionCode,
+        regionName: row.regionName,
+        status: 'failed',
+        sourceUrl: row.sourceUrl,
+        errorText: row.errorText,
+      };
+    }),
+  };
+}
+
 async function replaceSnapshotItems(
+  executor: QueryExecutor,
   snapshotId: number,
   result: Extract<YouTubeHotRegionResult, { status: 'success' }>,
 ) {
-  const now = new Date().toISOString();
-  await db.run(sql`DELETE FROM youtube_hot_hourly_items WHERE snapshot_id = ${snapshotId}`);
+  const now = nowUtcIso();
+  await deleteRowsNotInList({
+    executor,
+    tableName: 'youtube_hot_hourly_items',
+    snapshotId,
+    keyColumn: 'video_id',
+    keepKeys: Array.from(new Set(result.items.map((item) => item.videoId))),
+  });
+  if (!result.items.length) return;
+
+  await negateRanksForSnapshot({
+    executor,
+    tableName: 'youtube_hot_hourly_items',
+    snapshotId,
+  });
 
   const valueRows = result.items.map((item) => sql`
     (
@@ -371,7 +577,7 @@ async function replaceSnapshotItems(
     )
   `);
 
-  await db.run(sql`
+  await executor.run(sql`
     INSERT INTO youtube_hot_hourly_items (
       snapshot_id,
       rank,
@@ -397,11 +603,32 @@ async function replaceSnapshotItems(
       created_at
     )
     VALUES ${sql.join(valueRows, sql`, `)}
+    ON CONFLICT(snapshot_id, video_id)
+    DO UPDATE SET
+      rank = excluded.rank,
+      video_url = excluded.video_url,
+      title = excluded.title,
+      description = excluded.description,
+      thumbnail_url = excluded.thumbnail_url,
+      category_id = excluded.category_id,
+      category_title = excluded.category_title,
+      published_at = excluded.published_at,
+      duration_iso = excluded.duration_iso,
+      view_count = excluded.view_count,
+      like_count = excluded.like_count,
+      comment_count = excluded.comment_count,
+      channel_id = excluded.channel_id,
+      channel_title = excluded.channel_title,
+      channel_url = excluded.channel_url,
+      channel_avatar_url = excluded.channel_avatar_url,
+      subscriber_count = excluded.subscriber_count,
+      hidden_subscriber_count = excluded.hidden_subscriber_count,
+      metadata_json = excluded.metadata_json
   `);
 }
 
-async function updateBatchSummary(batchId: number) {
-  const rows = await db.all<BatchMetaRow>(sql`
+async function updateBatchSummary(executor: QueryExecutor, batchId: number) {
+  const rows = await executor.all<BatchMetaRow>(sql`
     SELECT
       b.id as id,
       b.snapshot_hour as snapshotHour,
@@ -422,7 +649,7 @@ async function updateBatchSummary(batchId: number) {
 
   const nextStatus = summary.regionCount > 0 && summary.failedRegionCount === 0 ? 'published' : 'failed';
   const generatedAt = summary.snapshotHour;
-  await db.run(sql`
+  await executor.run(sql`
     UPDATE youtube_hot_hourly_batches
     SET
       batch_status = ${nextStatus},
@@ -441,50 +668,78 @@ async function updateBatchSummary(batchId: number) {
 }
 
 export async function saveYouTubeHotHourlyResults(snapshotHour: string, results: YouTubeHotRegionResult[]) {
-  const batchId = await upsertBatch(snapshotHour);
-  const summary = {
-    success: 0,
-    failed: 0,
-    batchId,
-  };
+  const normalizedResults = results
+    .map(normalizeYouTubeHotResultForComparison)
+    .sort((left, right) => left.regionCode.localeCompare(right.regionCode));
+  const existingBatch = await loadExistingYouTubeHotBatchComparison(snapshotHour);
+  if (existingBatch) {
+    const existingResults = [...existingBatch.results].sort((left, right) => left.regionCode.localeCompare(right.regionCode));
+    if (areComparableValuesEqual(existingResults, normalizedResults)) {
+      const success = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - success;
+      console.log(`[youtube-hot] skipped batch save for ${snapshotHour}; content unchanged`);
+      return {
+        batchId: existingBatch.batchId,
+        success,
+        failed,
+        batch: {
+          id: existingBatch.batchId,
+          snapshotHour,
+          generatedAt: snapshotHour,
+          regionCount: results.length,
+          successRegionCount: success,
+          failedRegionCount: failed,
+        } satisfies YouTubeHotLatestBatch,
+      };
+    }
+  }
 
-  for (const result of results) {
-    if (result.status === 'success') {
-      const snapshotId = await upsertSnapshot({
+  return db.transaction(async (tx) => {
+    const batchId = await upsertBatch(tx, snapshotHour);
+    const summary = {
+      success: 0,
+      failed: 0,
+      batchId,
+    };
+
+    for (const result of results) {
+      if (result.status === 'success') {
+        const snapshotId = await upsertSnapshot(tx, {
+          batchId,
+          regionCode: result.regionCode,
+          regionName: result.regionName,
+          sourceUrl: result.sourceUrl,
+          status: 'success',
+          itemCount: result.items.length,
+          errorText: null,
+          rawPayload: null,
+        });
+
+        await replaceSnapshotItems(tx, snapshotId, result);
+        summary.success += 1;
+        continue;
+      }
+
+      await upsertSnapshot(tx, {
         batchId,
         regionCode: result.regionCode,
         regionName: result.regionName,
         sourceUrl: result.sourceUrl,
-        status: 'success',
-        itemCount: result.items.length,
-        errorText: null,
+        status: 'failed',
+        itemCount: 0,
+        errorText: result.error.slice(0, 500),
         rawPayload: null,
       });
 
-      await replaceSnapshotItems(snapshotId, result);
-      summary.success += 1;
-      continue;
+      summary.failed += 1;
     }
 
-    await upsertSnapshot({
-      batchId,
-      regionCode: result.regionCode,
-      regionName: result.regionName,
-      sourceUrl: result.sourceUrl,
-      status: 'failed',
-      itemCount: 0,
-      errorText: result.error.slice(0, 500),
-      rawPayload: null,
-    });
-
-    summary.failed += 1;
-  }
-
-  const batch = await updateBatchSummary(batchId);
-  return {
-    ...summary,
-    batch,
-  };
+    const batch = await updateBatchSummary(tx, batchId);
+    return {
+      ...summary,
+      batch,
+    };
+  });
 }
 
 export async function getLatestPublishedBatch(): Promise<YouTubeHotLatestBatch | null> {

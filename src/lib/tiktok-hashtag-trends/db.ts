@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { parseJsonObject, toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
+import { deleteRowsNotInList, negateRanksForSnapshot } from '@/lib/db/hourly-item-diff';
+import { areComparableValuesEqual } from '@/lib/db/snapshot-write-guard';
 import { nowUtcIso } from '@/lib/db/time';
 import type {
   TikTokHashtagCountryGroup,
@@ -55,6 +57,35 @@ interface QueryRow {
   creatorPreviewJson: string | null;
   detailJson: string | null;
 }
+
+interface SnapshotCompareRow {
+  id: number;
+  countryCode: string;
+  countryName: string;
+  status: 'success' | 'failed';
+  sourceUrl: string;
+  listApiUrl: string | null;
+  itemCount: number;
+  errorText: string | null;
+}
+
+interface ItemCompareRow {
+  snapshotId: number;
+  rank: number;
+  hashtagId: string;
+  hashtagName: string;
+  publishCount: number | null;
+  videoViews: number | null;
+  rankDiff: number | null;
+  rankDiffType: number | null;
+  industryName: string | null;
+  detailPageUrl: string;
+  trendPointsJson: string | null;
+  creatorPreviewJson: string | null;
+  detailJson: string | null;
+}
+
+type QueryExecutor = Pick<typeof db, 'all' | 'run'>;
 
 function parseTrendPoints(value: string | null): TikTokHashtagTrendPoint[] {
   const parsed = parseJsonObject<unknown>(value);
@@ -123,9 +154,9 @@ function mapBatchRow(row: BatchMetaRow | null | undefined): TikTokHashtagLatestB
   };
 }
 
-async function upsertBatch(snapshotHour: string) {
+async function upsertBatch(executor: QueryExecutor, snapshotHour: string) {
   const now = nowUtcIso();
-  const rows = await db.all<BatchIdRow>(sql`
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO tiktok_hashtag_hourly_batches (
       snapshot_hour,
       batch_status,
@@ -153,7 +184,9 @@ async function upsertBatch(snapshotHour: string) {
   return rows[0].id;
 }
 
-async function upsertSnapshot(params: {
+async function upsertSnapshot(
+  executor: QueryExecutor,
+  params: {
   batchId: number;
   countryCode: string;
   countryName: string;
@@ -165,8 +198,9 @@ async function upsertSnapshot(params: {
   warningsJson: string | null;
   timingsJson: string | null;
   rawPayload: string | null;
-}) {
-  const rows = await db.all<BatchIdRow>(sql`
+},
+) {
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO tiktok_hashtag_hourly_snapshots (
       batch_id,
       country_code,
@@ -232,12 +266,161 @@ async function upsertSnapshot(params: {
   return rows[0].id;
 }
 
+function normalizeTikTokHashtagResultForComparison(result: TikTokHashtagTargetResult) {
+  const base = {
+    countryCode: result.countryCode,
+    countryName: result.countryName,
+    sourceUrl: result.sourceUrl,
+    listApiUrl: result.listApiUrl,
+  };
+
+  if (result.status === 'success') {
+    return {
+      ...base,
+      status: 'success',
+      itemCount: result.items.length,
+      items: result.items.map((item) => ({
+        rank: item.rank,
+        hashtagId: item.hashtagId,
+        hashtagName: item.hashtagName,
+        publishCount: item.publishCount,
+        videoViews: item.videoViews,
+        rankDiff: item.rankDiff,
+        rankDiffType: item.rankDiffType,
+        industryName: item.industryName,
+        detailPageUrl: item.detailPageUrl,
+        trendPoints: item.trendPoints,
+        creatorPreview: item.creatorPreview,
+        detail: item.detail ?? null,
+      })),
+    };
+  }
+
+  return {
+    ...base,
+    status: 'failed',
+    errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
+  };
+}
+
+async function loadExistingTikTokHashtagBatchComparison(snapshotHour: string) {
+  const batchRows = await db.all<BatchIdRow>(sql`
+    SELECT id
+    FROM tiktok_hashtag_hourly_batches
+    WHERE snapshot_hour = ${snapshotHour}
+    LIMIT 1
+  `);
+  const batchId = batchRows[0]?.id;
+  if (!batchId) return null;
+
+  const snapshotRows = await db.all<SnapshotCompareRow>(sql`
+    SELECT
+      id,
+      country_code as countryCode,
+      country_name as countryName,
+      status,
+      source_url as sourceUrl,
+      list_api_url as listApiUrl,
+      item_count as itemCount,
+      error_text as errorText
+    FROM tiktok_hashtag_hourly_snapshots
+    WHERE batch_id = ${batchId}
+    ORDER BY country_code ASC
+  `);
+
+  const successSnapshotIds = snapshotRows.filter((row) => row.status === 'success').map((row) => row.id);
+  const itemRows = successSnapshotIds.length
+    ? await db.all<ItemCompareRow>(sql`
+        SELECT
+          snapshot_id as snapshotId,
+          rank,
+          hashtag_id as hashtagId,
+          hashtag_name as hashtagName,
+          publish_count as publishCount,
+          video_views as videoViews,
+          rank_diff as rankDiff,
+          rank_diff_type as rankDiffType,
+          industry_name as industryName,
+          detail_page_url as detailPageUrl,
+          trend_points_json as trendPointsJson,
+          creator_preview_json as creatorPreviewJson,
+          detail_json as detailJson
+        FROM tiktok_hashtag_hourly_items
+        WHERE snapshot_id IN (${sql.join(successSnapshotIds.map((id) => sql`${id}`), sql`, `)})
+        ORDER BY snapshot_id ASC, rank ASC
+      `)
+    : [];
+
+  const itemsBySnapshotId = new Map<number, ItemCompareRow[]>();
+  for (const row of itemRows) {
+    const bucket = itemsBySnapshotId.get(row.snapshotId);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      itemsBySnapshotId.set(row.snapshotId, [row]);
+    }
+  }
+
+  return {
+    batchId,
+    results: snapshotRows.map((row) => {
+      const base = {
+        countryCode: row.countryCode,
+        countryName: row.countryName,
+        sourceUrl: row.sourceUrl,
+        listApiUrl: row.listApiUrl,
+      };
+
+      if (row.status === 'success') {
+        return {
+          ...base,
+          status: 'success',
+          itemCount: toNumber(row.itemCount, 0),
+          items: (itemsBySnapshotId.get(row.id) ?? []).map((item) => ({
+            rank: item.rank,
+            hashtagId: item.hashtagId,
+            hashtagName: item.hashtagName,
+            publishCount: toNullableNumber(item.publishCount),
+            videoViews: toNullableNumber(item.videoViews),
+            rankDiff: toNullableNumber(item.rankDiff),
+            rankDiffType: toNullableNumber(item.rankDiffType),
+            industryName: item.industryName,
+            detailPageUrl: item.detailPageUrl,
+            trendPoints: parseTrendPoints(item.trendPointsJson),
+            creatorPreview: parseCreatorPreview(item.creatorPreviewJson),
+            detail: parseDetail(item.detailJson),
+          })),
+        };
+      }
+
+      return {
+        ...base,
+        status: 'failed',
+        errorText: row.errorText,
+      };
+    }),
+  };
+}
+
 async function replaceSnapshotItems(
+  executor: QueryExecutor,
   snapshotId: number,
   result: Extract<TikTokHashtagTargetResult, { status: 'success' }>,
 ) {
-  await db.run(sql`DELETE FROM tiktok_hashtag_hourly_items WHERE snapshot_id = ${snapshotId}`);
+  await deleteRowsNotInList({
+    executor,
+    tableName: 'tiktok_hashtag_hourly_items',
+    snapshotId,
+    keyColumn: 'hashtag_id',
+    keepKeys: Array.from(new Set(result.items.map((item) => item.hashtagId))),
+  });
   if (!result.items.length) return;
+
+  await negateRanksForSnapshot({
+    executor,
+    tableName: 'tiktok_hashtag_hourly_items',
+    snapshotId,
+  });
 
   const createdAt = nowUtcIso();
   const valueRows = result.items.map((item) => sql`
@@ -259,7 +442,7 @@ async function replaceSnapshotItems(
     )
   `);
 
-  await db.run(sql`
+  await executor.run(sql`
     INSERT INTO tiktok_hashtag_hourly_items (
       snapshot_id,
       rank,
@@ -277,11 +460,24 @@ async function replaceSnapshotItems(
       created_at
     )
     VALUES ${sql.join(valueRows, sql`, `)}
+    ON CONFLICT(snapshot_id, hashtag_id)
+    DO UPDATE SET
+      rank = excluded.rank,
+      hashtag_name = excluded.hashtag_name,
+      publish_count = excluded.publish_count,
+      video_views = excluded.video_views,
+      rank_diff = excluded.rank_diff,
+      rank_diff_type = excluded.rank_diff_type,
+      industry_name = excluded.industry_name,
+      detail_page_url = excluded.detail_page_url,
+      trend_points_json = excluded.trend_points_json,
+      creator_preview_json = excluded.creator_preview_json,
+      detail_json = excluded.detail_json
   `);
 }
 
-async function updateBatchSummary(batchId: number, targetCountryCount: number) {
-  const rows = await db.all<BatchMetaRow>(sql`
+async function updateBatchSummary(executor: QueryExecutor, batchId: number, targetCountryCount: number) {
+  const rows = await executor.all<BatchMetaRow>(sql`
     SELECT
       b.id as id,
       b.snapshot_hour as snapshotHour,
@@ -308,7 +504,7 @@ async function updateBatchSummary(batchId: number, targetCountryCount: number) {
       : 'failed';
   const generatedAt = summary.snapshotHour;
 
-  await db.run(sql`
+  await executor.run(sql`
     UPDATE tiktok_hashtag_hourly_batches
     SET
       batch_status = ${nextStatus},
@@ -328,53 +524,81 @@ async function updateBatchSummary(batchId: number, targetCountryCount: number) {
 }
 
 export async function saveTikTokHashtagHourlyResults(snapshotHour: string, results: TikTokHashtagTargetResult[]) {
-  const batchId = await upsertBatch(snapshotHour);
-  let success = 0;
-  let failed = 0;
+  const normalizedResults = results
+    .map(normalizeTikTokHashtagResultForComparison)
+    .sort((left, right) => left.countryCode.localeCompare(right.countryCode));
+  const existingBatch = await loadExistingTikTokHashtagBatchComparison(snapshotHour);
+  if (existingBatch) {
+    const existingResults = [...existingBatch.results].sort((left, right) => left.countryCode.localeCompare(right.countryCode));
+    if (areComparableValuesEqual(existingResults, normalizedResults)) {
+      const success = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - success;
+      console.log(`[tiktok-hashtags] skipped batch save for ${snapshotHour}; content unchanged`);
+      return {
+        batchId: existingBatch.batchId,
+        success,
+        failed,
+        batch: {
+          id: existingBatch.batchId,
+          snapshotHour,
+          generatedAt: snapshotHour,
+          targetCountryCount: results.length,
+          successCountryCount: success,
+          failedCountryCount: failed,
+        } satisfies TikTokHashtagLatestBatch,
+      };
+    }
+  }
 
-  for (const result of results) {
-    if (result.status === 'success') {
-      const snapshotId = await upsertSnapshot({
+  return db.transaction(async (tx) => {
+    const batchId = await upsertBatch(tx, snapshotHour);
+    let success = 0;
+    let failed = 0;
+
+    for (const result of results) {
+      if (result.status === 'success') {
+        const snapshotId = await upsertSnapshot(tx, {
+          batchId,
+          countryCode: result.countryCode,
+          countryName: result.countryName,
+          sourceUrl: result.sourceUrl,
+          listApiUrl: result.listApiUrl,
+          status: 'success',
+          itemCount: result.items.length,
+          errorText: null,
+          warningsJson: toJson(result.warnings),
+          timingsJson: toJson(result.timingsMs),
+          rawPayload: toJson(result),
+        });
+        await replaceSnapshotItems(tx, snapshotId, result);
+        success += 1;
+        continue;
+      }
+
+      await upsertSnapshot(tx, {
         batchId,
         countryCode: result.countryCode,
         countryName: result.countryName,
         sourceUrl: result.sourceUrl,
         listApiUrl: result.listApiUrl,
-        status: 'success',
-        itemCount: result.items.length,
-        errorText: null,
-        warningsJson: toJson(result.warnings),
+        status: 'failed',
+        itemCount: 0,
+        errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
+        warningsJson: null,
         timingsJson: toJson(result.timingsMs),
         rawPayload: toJson(result),
       });
-      await replaceSnapshotItems(snapshotId, result);
-      success += 1;
-      continue;
+      failed += 1;
     }
 
-    await upsertSnapshot({
+    const batch = await updateBatchSummary(tx, batchId, results.length);
+    return {
       batchId,
-      countryCode: result.countryCode,
-      countryName: result.countryName,
-      sourceUrl: result.sourceUrl,
-      listApiUrl: result.listApiUrl,
-      status: 'failed',
-      itemCount: 0,
-      errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
-      warningsJson: null,
-      timingsJson: toJson(result.timingsMs),
-      rawPayload: toJson(result),
-    });
-    failed += 1;
-  }
-
-  const batch = await updateBatchSummary(batchId, results.length);
-  return {
-    batchId,
-    success,
-    failed,
-    batch,
-  };
+      success,
+      failed,
+      batch,
+    };
+  });
 }
 
 export async function getLatestPublishedTikTokHashtagBatch(): Promise<TikTokHashtagLatestBatch | null> {

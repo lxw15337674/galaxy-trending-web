@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { parseJsonObject, toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
+import { deleteRowsNotInList, negateRanksForSnapshot } from '@/lib/db/hourly-item-diff';
+import { areComparableValuesEqual } from '@/lib/db/snapshot-write-guard';
 import { nowUtcIso } from '@/lib/db/time';
 import type {
   TikTokVideoCountryFilter,
@@ -54,6 +56,35 @@ interface QueryRow {
   rawItemJson: string | null;
 }
 
+interface SnapshotCompareRow {
+  id: number;
+  countryCode: string;
+  countryName: string;
+  period: number;
+  orderBy: TikTokVideoOrderBy;
+  status: 'success' | 'failed';
+  sourceUrl: string;
+  listApiUrl: string | null;
+  pageCount: number;
+  itemCount: number;
+  totalCount: number;
+  errorText: string | null;
+}
+
+interface ItemCompareRow {
+  snapshotId: number;
+  rank: number;
+  videoId: string;
+  itemId: string;
+  itemUrl: string;
+  title: string;
+  coverUrl: string | null;
+  durationSeconds: number | null;
+  regionName: string | null;
+}
+
+type QueryExecutor = Pick<typeof db, 'all' | 'run'>;
+
 function mapBatchRow(row: BatchMetaRow | null | undefined): TikTokVideoLatestBatch | null {
   if (!row) return null;
   return {
@@ -66,9 +97,9 @@ function mapBatchRow(row: BatchMetaRow | null | undefined): TikTokVideoLatestBat
   };
 }
 
-async function upsertBatch(snapshotHour: string) {
+async function upsertBatch(executor: QueryExecutor, snapshotHour: string) {
   const now = nowUtcIso();
-  const rows = await db.all<BatchIdRow>(sql`
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO tiktok_video_hourly_batches (
       snapshot_hour,
       batch_status,
@@ -96,7 +127,9 @@ async function upsertBatch(snapshotHour: string) {
   return rows[0].id;
 }
 
-async function upsertSnapshot(params: {
+async function upsertSnapshot(
+  executor: QueryExecutor,
+  params: {
   batchId: number;
   countryCode: string;
   countryName: string;
@@ -112,8 +145,9 @@ async function upsertSnapshot(params: {
   warningsJson: string | null;
   timingsJson: string | null;
   rawPayload: string | null;
-}) {
-  const rows = await db.all<BatchIdRow>(sql`
+},
+) {
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO tiktok_video_hourly_snapshots (
       batch_id,
       country_code,
@@ -197,12 +231,165 @@ async function upsertSnapshot(params: {
   return rows[0].id;
 }
 
+function normalizeTikTokVideoResultForComparison(result: TikTokVideoTargetResult) {
+  const base = {
+    countryCode: result.countryCode,
+    countryName: result.countryName,
+    period: result.period,
+    orderBy: result.orderBy,
+    sourceUrl: result.sourceUrl,
+    listApiUrl: result.listApiUrl,
+  };
+
+  if (result.status === 'success') {
+    return {
+      ...base,
+      status: 'success',
+      pageCount: result.pageCount,
+      itemCount: result.items.length,
+      totalCount: result.totalCount,
+      items: result.items.map((item) => ({
+        rank: item.rank,
+        videoId: item.videoId,
+        itemId: item.itemId,
+        itemUrl: item.itemUrl,
+        title: item.title,
+        coverUrl: item.coverUrl,
+        durationSeconds: item.durationSeconds,
+        regionName: item.regionName,
+      })),
+    };
+  }
+
+  return {
+    ...base,
+    status: 'failed',
+    pageCount: result.pageCount,
+    totalCount: result.totalCount,
+    errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
+  };
+}
+
+async function loadExistingTikTokVideoBatchComparison(snapshotHour: string) {
+  const batchRows = await db.all<BatchIdRow>(sql`
+    SELECT id
+    FROM tiktok_video_hourly_batches
+    WHERE snapshot_hour = ${snapshotHour}
+    LIMIT 1
+  `);
+  const batchId = batchRows[0]?.id;
+  if (!batchId) return null;
+
+  const snapshotRows = await db.all<SnapshotCompareRow>(sql`
+    SELECT
+      id,
+      country_code as countryCode,
+      country_name as countryName,
+      period,
+      order_by as orderBy,
+      status,
+      source_url as sourceUrl,
+      list_api_url as listApiUrl,
+      page_count as pageCount,
+      item_count as itemCount,
+      total_count as totalCount,
+      error_text as errorText
+    FROM tiktok_video_hourly_snapshots
+    WHERE batch_id = ${batchId}
+    ORDER BY country_code ASC, period ASC, order_by ASC
+  `);
+
+  const successSnapshotIds = snapshotRows.filter((row) => row.status === 'success').map((row) => row.id);
+  const itemRows = successSnapshotIds.length
+    ? await db.all<ItemCompareRow>(sql`
+        SELECT
+          snapshot_id as snapshotId,
+          rank,
+          video_id as videoId,
+          item_id as itemId,
+          item_url as itemUrl,
+          title,
+          cover_url as coverUrl,
+          duration_seconds as durationSeconds,
+          region_name as regionName
+        FROM tiktok_video_hourly_items
+        WHERE snapshot_id IN (${sql.join(successSnapshotIds.map((id) => sql`${id}`), sql`, `)})
+        ORDER BY snapshot_id ASC, rank ASC
+      `)
+    : [];
+
+  const itemsBySnapshotId = new Map<number, ItemCompareRow[]>();
+  for (const row of itemRows) {
+    const bucket = itemsBySnapshotId.get(row.snapshotId);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      itemsBySnapshotId.set(row.snapshotId, [row]);
+    }
+  }
+
+  return {
+    batchId,
+    results: snapshotRows.map((row) => {
+      const base = {
+        countryCode: row.countryCode,
+        countryName: row.countryName,
+        period: toNumber(row.period, 0),
+        orderBy: row.orderBy,
+        sourceUrl: row.sourceUrl,
+        listApiUrl: row.listApiUrl,
+      };
+
+      if (row.status === 'success') {
+        return {
+          ...base,
+          status: 'success',
+          pageCount: toNumber(row.pageCount, 0),
+          itemCount: toNumber(row.itemCount, 0),
+          totalCount: toNumber(row.totalCount, 0),
+          items: (itemsBySnapshotId.get(row.id) ?? []).map((item) => ({
+            rank: item.rank,
+            videoId: item.videoId,
+            itemId: item.itemId,
+            itemUrl: item.itemUrl,
+            title: item.title,
+            coverUrl: item.coverUrl,
+            durationSeconds: toNullableNumber(item.durationSeconds),
+            regionName: item.regionName,
+          })),
+        };
+      }
+
+      return {
+        ...base,
+        status: 'failed',
+        pageCount: toNumber(row.pageCount, 0),
+        totalCount: toNumber(row.totalCount, 0),
+        errorText: row.errorText,
+      };
+    }),
+  };
+}
+
 async function replaceSnapshotItems(
+  executor: QueryExecutor,
   snapshotId: number,
   result: Extract<TikTokVideoTargetResult, { status: 'success' }>,
 ) {
-  await db.run(sql`DELETE FROM tiktok_video_hourly_items WHERE snapshot_id = ${snapshotId}`);
+  await deleteRowsNotInList({
+    executor,
+    tableName: 'tiktok_video_hourly_items',
+    snapshotId,
+    keyColumn: 'video_id',
+    keepKeys: Array.from(new Set(result.items.map((item) => item.videoId))),
+  });
   if (!result.items.length) return;
+
+  await negateRanksForSnapshot({
+    executor,
+    tableName: 'tiktok_video_hourly_items',
+    snapshotId,
+  });
 
   const createdAt = nowUtcIso();
   const valueRows = result.items.map((item) => sql`
@@ -221,7 +408,7 @@ async function replaceSnapshotItems(
     )
   `);
 
-  await db.run(sql`
+  await executor.run(sql`
     INSERT INTO tiktok_video_hourly_items (
       snapshot_id,
       rank,
@@ -236,11 +423,21 @@ async function replaceSnapshotItems(
       created_at
     )
     VALUES ${sql.join(valueRows, sql`, `)}
+    ON CONFLICT(snapshot_id, video_id)
+    DO UPDATE SET
+      rank = excluded.rank,
+      item_id = excluded.item_id,
+      item_url = excluded.item_url,
+      title = excluded.title,
+      cover_url = excluded.cover_url,
+      duration_seconds = excluded.duration_seconds,
+      region_name = excluded.region_name,
+      raw_item_json = excluded.raw_item_json
   `);
 }
 
-async function updateBatchSummary(batchId: number, targetScopeCount: number) {
-  const rows = await db.all<BatchMetaRow>(sql`
+async function updateBatchSummary(executor: QueryExecutor, batchId: number, targetScopeCount: number) {
+  const rows = await executor.all<BatchMetaRow>(sql`
     SELECT
       b.id as id,
       b.snapshot_hour as snapshotHour,
@@ -265,7 +462,7 @@ async function updateBatchSummary(batchId: number, targetScopeCount: number) {
       : 'failed';
   const generatedAt = summary.snapshotHour;
 
-  await db.run(sql`
+  await executor.run(sql`
     UPDATE tiktok_video_hourly_batches
     SET
       batch_status = ${nextStatus},
@@ -285,13 +482,72 @@ async function updateBatchSummary(batchId: number, targetScopeCount: number) {
 }
 
 export async function saveTikTokVideoHourlyResults(snapshotHour: string, results: TikTokVideoTargetResult[]) {
-  const batchId = await upsertBatch(snapshotHour);
-  let success = 0;
-  let failed = 0;
+  const normalizedResults = results
+    .map(normalizeTikTokVideoResultForComparison)
+    .sort(
+      (left, right) =>
+        left.countryCode.localeCompare(right.countryCode) ||
+        left.period - right.period ||
+        left.orderBy.localeCompare(right.orderBy),
+    );
+  const existingBatch = await loadExistingTikTokVideoBatchComparison(snapshotHour);
+  if (existingBatch) {
+    const existingResults = [...existingBatch.results].sort(
+      (left, right) =>
+        left.countryCode.localeCompare(right.countryCode) ||
+        left.period - right.period ||
+        left.orderBy.localeCompare(right.orderBy),
+    );
+    if (areComparableValuesEqual(existingResults, normalizedResults)) {
+      const success = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - success;
+      console.log(`[tiktok-videos] skipped batch save for ${snapshotHour}; content unchanged`);
+      return {
+        batchId: existingBatch.batchId,
+        success,
+        failed,
+        batch: {
+          id: existingBatch.batchId,
+          snapshotHour,
+          generatedAt: snapshotHour,
+          targetScopeCount: results.length,
+          successScopeCount: success,
+          failedScopeCount: failed,
+        } satisfies TikTokVideoLatestBatch,
+      };
+    }
+  }
 
-  for (const result of results) {
-    if (result.status === 'success') {
-      const snapshotId = await upsertSnapshot({
+  return db.transaction(async (tx) => {
+    const batchId = await upsertBatch(tx, snapshotHour);
+    let success = 0;
+    let failed = 0;
+
+    for (const result of results) {
+      if (result.status === 'success') {
+        const snapshotId = await upsertSnapshot(tx, {
+          batchId,
+          countryCode: result.countryCode,
+          countryName: result.countryName,
+          period: result.period,
+          orderBy: result.orderBy,
+          sourceUrl: result.sourceUrl,
+          listApiUrl: result.listApiUrl,
+          status: 'success',
+          pageCount: result.pageCount,
+          itemCount: result.items.length,
+          totalCount: result.totalCount,
+          errorText: null,
+          warningsJson: toJson(result.warnings),
+          timingsJson: toJson(result.timingsMs),
+          rawPayload: toJson(result),
+        });
+        await replaceSnapshotItems(tx, snapshotId, result);
+        success += 1;
+        continue;
+      }
+
+      await upsertSnapshot(tx, {
         batchId,
         countryCode: result.countryCode,
         countryName: result.countryName,
@@ -299,47 +555,26 @@ export async function saveTikTokVideoHourlyResults(snapshotHour: string, results
         orderBy: result.orderBy,
         sourceUrl: result.sourceUrl,
         listApiUrl: result.listApiUrl,
-        status: 'success',
+        status: 'failed',
         pageCount: result.pageCount,
-        itemCount: result.items.length,
+        itemCount: 0,
         totalCount: result.totalCount,
-        errorText: null,
-        warningsJson: toJson(result.warnings),
+        errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
+        warningsJson: null,
         timingsJson: toJson(result.timingsMs),
         rawPayload: toJson(result),
       });
-      await replaceSnapshotItems(snapshotId, result);
-      success += 1;
-      continue;
+      failed += 1;
     }
 
-    await upsertSnapshot({
+    const batch = await updateBatchSummary(tx, batchId, results.length);
+    return {
       batchId,
-      countryCode: result.countryCode,
-      countryName: result.countryName,
-      period: result.period,
-      orderBy: result.orderBy,
-      sourceUrl: result.sourceUrl,
-      listApiUrl: result.listApiUrl,
-      status: 'failed',
-      pageCount: result.pageCount,
-      itemCount: 0,
-      totalCount: result.totalCount,
-      errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
-      warningsJson: null,
-      timingsJson: toJson(result.timingsMs),
-      rawPayload: toJson(result),
-    });
-    failed += 1;
-  }
-
-  const batch = await updateBatchSummary(batchId, results.length);
-  return {
-    batchId,
-    success,
-    failed,
-    batch,
-  };
+      success,
+      failed,
+      batch,
+    };
+  });
 }
 
 export async function getLatestPublishedTikTokVideoBatch(): Promise<TikTokVideoLatestBatch | null> {

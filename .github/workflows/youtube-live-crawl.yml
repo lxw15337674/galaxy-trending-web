@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: youtube-live-crawl-hourly
+  group: turso-db-write-queue
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +42,3 @@ jobs:
 
       - name: Crawl YouTube live top 200
         run: pnpm crawl:youtube:live --max-results=200 --search-pages=4 --retention-days=30 --query=live
-
-      - name: Purge old YouTube live snapshots
-        run: pnpm db:purge -- --days=30

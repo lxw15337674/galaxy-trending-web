@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { toBooleanInt, toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
+import { deleteRowsNotInList } from '@/lib/db/hourly-item-diff';
+import { areComparableValuesEqual } from '@/lib/db/snapshot-write-guard';
 import { nowUtcIso } from '@/lib/db/time';
 import {
   type XTrendHistoryPoint,
@@ -49,6 +51,31 @@ interface RegionRow {
   itemCount: number;
 }
 
+interface SnapshotCompareRow {
+  id: number;
+  regionKey: string;
+  regionLabel: string;
+  status: 'success' | 'failed';
+  sourceUrl: string;
+  extractionSource: string;
+  loggedIn: number;
+  itemCount: number;
+  errorText: string | null;
+}
+
+interface ItemCompareRow {
+  snapshotId: number;
+  rank: number;
+  trendName: string;
+  normalizedKey: string;
+  queryText: string | null;
+  trendUrl: string | null;
+  metaText: string | null;
+  tweetVolume: number | null;
+}
+
+type QueryExecutor = Pick<typeof db, 'all' | 'run'>;
+
 function mapBatchRow(row: BatchMetaRow | null | undefined): XTrendLatestBatch | null {
   if (!row) return null;
   return {
@@ -61,9 +88,9 @@ function mapBatchRow(row: BatchMetaRow | null | undefined): XTrendLatestBatch | 
   };
 }
 
-async function upsertBatch(snapshotHour: string) {
+async function upsertBatch(executor: QueryExecutor, snapshotHour: string) {
   const now = nowUtcIso();
-  const rows = await db.all<BatchIdRow>(sql`
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO x_trend_hourly_batches (
       snapshot_hour,
       batch_status,
@@ -91,7 +118,9 @@ async function upsertBatch(snapshotHour: string) {
   return rows[0].id;
 }
 
-async function upsertSnapshot(params: {
+async function upsertSnapshot(
+  executor: QueryExecutor,
+  params: {
   batchId: number;
   regionKey: string;
   regionLabel: string;
@@ -102,8 +131,9 @@ async function upsertSnapshot(params: {
   itemCount: number;
   errorText: string | null;
   rawPayload: string | null;
-}) {
-  const rows = await db.all<BatchIdRow>(sql`
+},
+) {
+  const rows = await executor.all<BatchIdRow>(sql`
     INSERT INTO x_trend_hourly_snapshots (
       batch_id,
       region_key,
@@ -163,11 +193,140 @@ async function upsertSnapshot(params: {
   return rows[0].id;
 }
 
+function normalizeXTrendResultForComparison(result: XTrendRegionResult) {
+  if (result.status === 'success') {
+    return {
+      regionKey: result.regionKey,
+      regionLabel: result.regionLabel,
+      status: 'success',
+      sourceUrl: result.sourceUrl,
+      extractionSource: result.extractionSource,
+      loggedIn: result.loggedIn,
+      items: result.items.map((item) => ({
+        rank: item.rank,
+        trendName: item.trendName,
+        normalizedKey: item.normalizedKey,
+        queryText: item.queryText,
+        trendUrl: item.trendUrl,
+        metaText: item.metaText,
+        tweetVolume: item.tweetVolume,
+      })),
+    };
+  }
+
+  return {
+    regionKey: result.regionKey,
+    regionLabel: result.regionLabel,
+    status: 'failed',
+    sourceUrl: result.sourceUrl,
+    extractionSource: result.extractionSource ?? 'network',
+    loggedIn: result.loggedIn,
+    errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
+  };
+}
+
+async function loadExistingXTrendBatchComparison(snapshotHour: string) {
+  const batchRows = await db.all<BatchIdRow>(sql`
+    SELECT id
+    FROM x_trend_hourly_batches
+    WHERE snapshot_hour = ${snapshotHour}
+    LIMIT 1
+  `);
+  const batchId = batchRows[0]?.id;
+  if (!batchId) return null;
+
+  const snapshotRows = await db.all<SnapshotCompareRow>(sql`
+    SELECT
+      id,
+      region_key as regionKey,
+      region_label as regionLabel,
+      status,
+      source_url as sourceUrl,
+      extraction_source as extractionSource,
+      logged_in as loggedIn,
+      item_count as itemCount,
+      error_text as errorText
+    FROM x_trend_hourly_snapshots
+    WHERE batch_id = ${batchId}
+    ORDER BY region_key ASC
+  `);
+
+  const successSnapshotIds = snapshotRows.filter((row) => row.status === 'success').map((row) => row.id);
+  const itemRows = successSnapshotIds.length
+    ? await db.all<ItemCompareRow>(sql`
+        SELECT
+          snapshot_id as snapshotId,
+          rank,
+          trend_name as trendName,
+          normalized_key as normalizedKey,
+          query_text as queryText,
+          trend_url as trendUrl,
+          meta_text as metaText,
+          tweet_volume as tweetVolume
+        FROM x_trend_hourly_items
+        WHERE snapshot_id IN (${sql.join(successSnapshotIds.map((id) => sql`${id}`), sql`, `)})
+        ORDER BY snapshot_id ASC, rank ASC
+      `)
+    : [];
+
+  const itemsBySnapshotId = new Map<number, ItemCompareRow[]>();
+  for (const row of itemRows) {
+    const bucket = itemsBySnapshotId.get(row.snapshotId);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      itemsBySnapshotId.set(row.snapshotId, [row]);
+    }
+  }
+
+  return {
+    batchId,
+    results: snapshotRows.map((row) => {
+      if (row.status === 'success') {
+        return {
+          regionKey: row.regionKey,
+          regionLabel: row.regionLabel,
+          status: 'success',
+          sourceUrl: row.sourceUrl,
+          extractionSource: row.extractionSource,
+          loggedIn: toBooleanInt(row.loggedIn),
+          items: (itemsBySnapshotId.get(row.id) ?? []).map((item) => ({
+            rank: item.rank,
+            trendName: item.trendName,
+            normalizedKey: item.normalizedKey,
+            queryText: item.queryText,
+            trendUrl: item.trendUrl,
+            metaText: item.metaText,
+            tweetVolume: toNullableNumber(item.tweetVolume),
+          })),
+        };
+      }
+
+      return {
+        regionKey: row.regionKey,
+        regionLabel: row.regionLabel,
+        status: 'failed',
+        sourceUrl: row.sourceUrl,
+        extractionSource: row.extractionSource,
+        loggedIn: toBooleanInt(row.loggedIn),
+        errorText: row.errorText,
+      };
+    }),
+  };
+}
+
 async function replaceSnapshotItems(
+  executor: QueryExecutor,
   snapshotId: number,
   result: Extract<XTrendRegionResult, { status: 'success' }>,
 ) {
-  await db.run(sql`DELETE FROM x_trend_hourly_items WHERE snapshot_id = ${snapshotId}`);
+  await deleteRowsNotInList({
+    executor,
+    tableName: 'x_trend_hourly_items',
+    snapshotId,
+    keyColumn: 'rank',
+    keepKeys: Array.from(new Set(result.items.map((item) => item.rank))),
+  });
   if (!result.items.length) return;
 
   const createdAt = nowUtcIso();
@@ -185,7 +344,7 @@ async function replaceSnapshotItems(
     )
   `);
 
-  await db.run(sql`
+  await executor.run(sql`
     INSERT INTO x_trend_hourly_items (
       snapshot_id,
       rank,
@@ -198,11 +357,19 @@ async function replaceSnapshotItems(
       created_at
     )
     VALUES ${sql.join(valueRows, sql`, `)}
+    ON CONFLICT(snapshot_id, rank)
+    DO UPDATE SET
+      trend_name = excluded.trend_name,
+      normalized_key = excluded.normalized_key,
+      query_text = excluded.query_text,
+      trend_url = excluded.trend_url,
+      meta_text = excluded.meta_text,
+      tweet_volume = excluded.tweet_volume
   `);
 }
 
-async function updateBatchSummary(batchId: number, targetRegionCount: number) {
-  const rows = await db.all<BatchMetaRow>(sql`
+async function updateBatchSummary(executor: QueryExecutor, batchId: number, targetRegionCount: number) {
+  const rows = await executor.all<BatchMetaRow>(sql`
     SELECT
       b.id as id,
       b.snapshot_hour as snapshotHour,
@@ -227,7 +394,7 @@ async function updateBatchSummary(batchId: number, targetRegionCount: number) {
       : 'failed';
   const generatedAt = summary.snapshotHour;
 
-  await db.run(sql`
+  await executor.run(sql`
     UPDATE x_trend_hourly_batches
     SET
       batch_status = ${nextStatus},
@@ -247,51 +414,79 @@ async function updateBatchSummary(batchId: number, targetRegionCount: number) {
 }
 
 export async function saveXTrendHourlyResults(snapshotHour: string, results: XTrendRegionResult[]) {
-  const batchId = await upsertBatch(snapshotHour);
-  let success = 0;
-  let failed = 0;
+  const normalizedResults = results
+    .map(normalizeXTrendResultForComparison)
+    .sort((left, right) => left.regionKey.localeCompare(right.regionKey));
+  const existingBatch = await loadExistingXTrendBatchComparison(snapshotHour);
+  if (existingBatch) {
+    const existingResults = [...existingBatch.results].sort((left, right) => left.regionKey.localeCompare(right.regionKey));
+    if (areComparableValuesEqual(existingResults, normalizedResults)) {
+      const success = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - success;
+      console.log(`[x-trends] skipped batch save for ${snapshotHour}; content unchanged`);
+      return {
+        batchId: existingBatch.batchId,
+        success,
+        failed,
+        batch: {
+          id: existingBatch.batchId,
+          snapshotHour,
+          generatedAt: snapshotHour,
+          targetRegionCount: results.length,
+          successRegionCount: success,
+          failedRegionCount: failed,
+        } satisfies XTrendLatestBatch,
+      };
+    }
+  }
 
-  for (const result of results) {
-    if (result.status === 'success') {
-      const snapshotId = await upsertSnapshot({
+  return db.transaction(async (tx) => {
+    const batchId = await upsertBatch(tx, snapshotHour);
+    let success = 0;
+    let failed = 0;
+
+    for (const result of results) {
+      if (result.status === 'success') {
+        const snapshotId = await upsertSnapshot(tx, {
+          batchId,
+          regionKey: result.regionKey,
+          regionLabel: result.regionLabel,
+          sourceUrl: result.sourceUrl,
+          extractionSource: result.extractionSource,
+          loggedIn: result.loggedIn,
+          status: 'success',
+          itemCount: result.items.length,
+          errorText: null,
+          rawPayload: toJson(result.rawPayload),
+        });
+        await replaceSnapshotItems(tx, snapshotId, result);
+        success += 1;
+        continue;
+      }
+
+      await upsertSnapshot(tx, {
         batchId,
         regionKey: result.regionKey,
         regionLabel: result.regionLabel,
         sourceUrl: result.sourceUrl,
-        extractionSource: result.extractionSource,
+        extractionSource: result.extractionSource ?? 'network',
         loggedIn: result.loggedIn,
-        status: 'success',
-        itemCount: result.items.length,
-        errorText: null,
+        status: 'failed',
+        itemCount: 0,
+        errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
         rawPayload: toJson(result.rawPayload),
       });
-      await replaceSnapshotItems(snapshotId, result);
-      success += 1;
-      continue;
+      failed += 1;
     }
 
-    await upsertSnapshot({
+    const batch = await updateBatchSummary(tx, batchId, results.length);
+    return {
       batchId,
-      regionKey: result.regionKey,
-      regionLabel: result.regionLabel,
-      sourceUrl: result.sourceUrl,
-      extractionSource: result.extractionSource ?? 'network',
-      loggedIn: result.loggedIn,
-      status: 'failed',
-      itemCount: 0,
-      errorText: `[${result.errorCode}] ${result.error}`.slice(0, 1000),
-      rawPayload: toJson(result.rawPayload),
-    });
-    failed += 1;
-  }
-
-  const batch = await updateBatchSummary(batchId, results.length);
-  return {
-    batchId,
-    success,
-    failed,
-    batch,
-  };
+      success,
+      failed,
+      batch,
+    };
+  });
 }
 
 export async function getLatestPublishedXTrendBatch(): Promise<XTrendLatestBatch | null> {

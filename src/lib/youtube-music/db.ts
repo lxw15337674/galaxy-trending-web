@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
 import { dedupeItemsByRank } from '@/lib/db/snapshot-utils';
 import { createSnapshotCache } from '@/lib/db/snapshot-cache';
+import { areSnapshotContentsEqual } from '@/lib/db/snapshot-write-guard';
 import type {
   YouTubeMusicChartItem,
   YouTubeMusicChartSnapshotWithItems,
@@ -53,6 +54,99 @@ export async function saveYouTubeMusicWeeklyTopSongsSnapshot(snapshot: YouTubeMu
   }
 
   const snapshotId = await db.transaction(async (tx) => {
+    const existingRows = await tx.all<SnapshotRow>(sql`
+      SELECT
+        id,
+        chart_type as chartType,
+        period_type as periodType,
+        country_code as countryCode,
+        country_name as countryName,
+        chart_end_date as chartEndDate,
+        fetched_at as fetchedAt,
+        source_url as sourceUrl,
+        item_count as itemCount
+      FROM youtube_music_chart_snapshots
+      WHERE
+        chart_type = ${snapshot.chartType}
+        AND period_type = ${snapshot.periodType}
+        AND country_code = ${snapshot.countryCode}
+        AND chart_end_date = ${snapshot.chartEndDate}
+      LIMIT 1
+    `);
+
+    const existingSnapshot = existingRows[0];
+    if (existingSnapshot) {
+      const existingItems = await tx.all<ItemRow>(sql`
+        SELECT
+          rank,
+          previous_rank as previousRank,
+          track_name as trackName,
+          artist_names as artistNames,
+          views,
+          periods_on_chart as periodsOnChart,
+          youtube_video_id as youtubeVideoId,
+          youtube_url as youtubeUrl,
+          thumbnail_url as thumbnailUrl,
+          raw_item_json as rawItemJson
+        FROM youtube_music_chart_items
+        WHERE snapshot_id = ${existingSnapshot.id}
+        ORDER BY rank ASC
+      `);
+
+      const isUnchanged = areSnapshotContentsEqual({
+        existingMeta: {
+          countryName: existingSnapshot.countryName,
+          sourceUrl: existingSnapshot.sourceUrl,
+        },
+        nextMeta: {
+          countryName: snapshot.countryName,
+          sourceUrl: snapshot.sourceUrl,
+        },
+        existingItems,
+        nextItems: items,
+        mapExistingItem: (item) => ({
+          rank: item.rank,
+          previousRank: toNullableNumber(item.previousRank),
+          trackName: item.trackName,
+          artistNames: item.artistNames,
+          views: toNullableNumber(item.views),
+          periodsOnChart: toNullableNumber(item.periodsOnChart),
+          youtubeVideoId: item.youtubeVideoId,
+          youtubeUrl: item.youtubeUrl,
+          thumbnailUrl: item.thumbnailUrl,
+        }),
+        mapNextItem: (item) => ({
+          rank: item.rank,
+          previousRank: item.previousRank,
+          trackName: item.trackName,
+          artistNames: item.artistNames,
+          views: item.views,
+          periodsOnChart: item.periodsOnChart,
+          youtubeVideoId: item.youtubeVideoId,
+          youtubeUrl: item.youtubeUrl,
+          thumbnailUrl: item.thumbnailUrl,
+        }),
+      });
+
+      if (isUnchanged) {
+        await tx.run(sql`
+          UPDATE youtube_music_chart_snapshots
+          SET
+            country_name = ${snapshot.countryName},
+            fetched_at = ${snapshot.fetchedAt},
+            source_url = ${snapshot.sourceUrl},
+            item_count = ${items.length},
+            updated_at = ${snapshot.fetchedAt}
+          WHERE id = ${existingSnapshot.id}
+        `);
+
+        console.log(
+          `[youtube-music] skipped weekly item rewrite for ${snapshot.countryCode} ${snapshot.chartEndDate}; content unchanged`,
+        );
+        return existingSnapshot.id;
+      }
+    }
+
     const rows = await tx.all<SnapshotIdRow>(sql`
       INSERT INTO youtube_music_chart_snapshots (
         chart_type,

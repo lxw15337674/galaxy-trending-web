@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: x-trending-crawl-hourly
+  group: turso-db-write-queue
   cancel-in-progress: false
 
 jobs:
@@ -55,4 +55,3 @@ jobs:
 
       - name: Crawl X trends hourly
         run: pnpm crawl:x:trending -- --timeout-ms=60000
-

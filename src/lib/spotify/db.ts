@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { toJson, toNullableNumber, toNumber } from '@/lib/db/codec';
 import { dedupeItemsByRank } from '@/lib/db/snapshot-utils';
 import { createSnapshotCache } from '@/lib/db/snapshot-cache';
+import { areSnapshotContentsEqual } from '@/lib/db/snapshot-write-guard';
 import { getSpotifyCountryCodeAliases, getSpotifyCountryName, normalizeSpotifyCountryCode } from './countries';
 import type { SpotifyChartItem, SpotifyCountryOption, SpotifyTopSongsSnapshot, SpotifyTopSongsSnapshotWithItems } from './types';
 
@@ -51,6 +52,112 @@ export async function saveSpotifyTopSongsSnapshot(snapshot: SpotifyTopSongsSnaps
   }
 
   const snapshotId = await db.transaction(async (tx) => {
+    const existingRows = await tx.all<SnapshotRow>(sql`
+      SELECT
+        id,
+        chart_type as chartType,
+        period_type as periodType,
+        country_code as countryCode,
+        country_name as countryName,
+        chart_end_date as chartEndDate,
+        fetched_at as fetchedAt,
+        source_url as sourceUrl,
+        chart_alias as chartAlias,
+        item_count as itemCount
+      FROM spotify_chart_snapshots
+      WHERE
+        chart_type = ${snapshot.chartType}
+        AND period_type = ${snapshot.periodType}
+        AND country_code = ${snapshot.countryCode}
+        AND chart_end_date = ${snapshot.chartEndDate}
+      LIMIT 1
+    `);
+
+    const existingSnapshot = existingRows[0];
+    if (existingSnapshot) {
+      const existingItems = await tx.all<ItemRow>(sql`
+        SELECT
+          rank,
+          previous_rank as previousRank,
+          peak_rank as peakRank,
+          appearances_on_chart as appearancesOnChart,
+          track_name as trackName,
+          artist_names as artistNames,
+          spotify_track_id as spotifyTrackId,
+          spotify_track_uri as spotifyTrackUri,
+          spotify_track_url as spotifyTrackUrl,
+          album_name as albumName,
+          thumbnail_url as thumbnailUrl,
+          stream_count as streamCount,
+          raw_item_json as rawItemJson
+        FROM spotify_chart_items
+        WHERE snapshot_id = ${existingSnapshot.id}
+        ORDER BY rank ASC
+      `);
+
+      const isUnchanged = areSnapshotContentsEqual({
+        existingMeta: {
+          countryName: existingSnapshot.countryName,
+          sourceUrl: existingSnapshot.sourceUrl,
+          chartAlias: existingSnapshot.chartAlias,
+        },
+        nextMeta: {
+          countryName: snapshot.countryName,
+          sourceUrl: snapshot.sourceUrl,
+          chartAlias: snapshot.chartAlias,
+        },
+        existingItems,
+        nextItems: items,
+        mapExistingItem: (item) => ({
+          rank: item.rank,
+          previousRank: toNullableNumber(item.previousRank),
+          peakRank: toNullableNumber(item.peakRank),
+          appearancesOnChart: toNullableNumber(item.appearancesOnChart),
+          trackName: item.trackName,
+          artistNames: item.artistNames,
+          spotifyTrackId: item.spotifyTrackId,
+          spotifyTrackUri: item.spotifyTrackUri,
+          spotifyTrackUrl: item.spotifyTrackUrl,
+          albumName: item.albumName,
+          thumbnailUrl: item.thumbnailUrl,
+          streamCount: toNullableNumber(item.streamCount),
+        }),
+        mapNextItem: (item) => ({
+          rank: item.rank,
+          previousRank: item.previousRank,
+          peakRank: item.peakRank,
+          appearancesOnChart: item.appearancesOnChart,
+          trackName: item.trackName,
+          artistNames: item.artistNames,
+          spotifyTrackId: item.spotifyTrackId,
+          spotifyTrackUri: item.spotifyTrackUri,
+          spotifyTrackUrl: item.spotifyTrackUrl,
+          albumName: item.albumName,
+          thumbnailUrl: item.thumbnailUrl,
+          streamCount: item.streamCount,
+        }),
+      });
+
+      if (isUnchanged) {
+        await tx.run(sql`
+          UPDATE spotify_chart_snapshots
+          SET
+            country_name = ${snapshot.countryName},
+            fetched_at = ${snapshot.fetchedAt},
+            source_url = ${snapshot.sourceUrl},
+            chart_alias = ${snapshot.chartAlias},
+            item_count = ${items.length},
+            updated_at = ${snapshot.fetchedAt}
+          WHERE id = ${existingSnapshot.id}
+        `);
+
+        console.log(
+          `[spotify] skipped item rewrite for ${snapshot.countryCode} ${snapshot.chartEndDate}; content unchanged`,
+        );
+        return existingSnapshot.id;
+      }
+    }
+
     const rows = await tx.all<SnapshotIdRow>(sql`
       INSERT INTO spotify_chart_snapshots (
         chart_type,
