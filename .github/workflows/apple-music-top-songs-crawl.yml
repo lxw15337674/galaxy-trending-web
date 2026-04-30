@@ -1,8 +1,8 @@
 name: Apple Music Top Songs Crawl
 
 on:
-  # schedule:
-  #   - cron: '50 */6 * * *'
+  schedule:
+    - cron: '50 */6 * * *'
   workflow_dispatch:
 
 permissions:

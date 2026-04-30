@@ -1,8 +1,8 @@
 name: Google Play Games Crawl
 
 on:
-  # schedule:
-  #   - cron: '55 */6 * * *'
+  schedule:
+    - cron: '55 */6 * * *'
   workflow_dispatch:
 
 permissions:
