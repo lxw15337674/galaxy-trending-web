@@ -85,6 +85,77 @@ export const youtubeHotHourlyItems = sqliteTable(
   }),
 );
 
+export const youtubeHotDailySnapshots = sqliteTable(
+  'youtube_hot_daily_snapshots',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    snapshotDate: text('snapshot_date').notNull(),
+    status: text('status').notNull().default('pending'),
+    sourceName: text('source_name').notNull().default('youtube-mostPopular-daily'),
+    generatedAt: text('generated_at'),
+    regionCount: integer('region_count').notNull().default(0),
+    itemCount: integer('item_count').notNull().default(0),
+    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    snapshotDateUnique: uniqueIndex('idx_youtube_hot_daily_snapshots_date_unique').on(table.snapshotDate),
+    statusDateIdx: index('idx_youtube_hot_daily_snapshots_status_date').on(table.status, table.snapshotDate),
+  }),
+);
+
+export const youtubeHotDailyItems = sqliteTable(
+  'youtube_hot_daily_items',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    snapshotId: integer('snapshot_id')
+      .notNull()
+      .references(() => youtubeHotDailySnapshots.id, { onDelete: 'cascade' }),
+    regionCode: text('region_code').notNull(),
+    regionName: text('region_name').notNull(),
+    videoId: text('video_id').notNull(),
+    videoUrl: text('video_url').notNull(),
+    title: text('title').notNull(),
+    thumbnailUrl: text('thumbnail_url'),
+    categoryId: text('category_id'),
+    categoryTitle: text('category_title'),
+    publishedAt: text('published_at'),
+    durationIso: text('duration_iso'),
+    channelId: text('channel_id').notNull(),
+    channelTitle: text('channel_title').notNull(),
+    channelUrl: text('channel_url').notNull(),
+    channelAvatarUrl: text('channel_avatar_url'),
+    subscriberCount: integer('subscriber_count'),
+    hiddenSubscriberCount: integer('hidden_subscriber_count').notNull().default(0),
+    maxViewCount: integer('max_view_count'),
+    maxLikeCount: integer('max_like_count'),
+    maxCommentCount: integer('max_comment_count'),
+    lastRank: integer('last_rank').notNull(),
+    bestRank: integer('best_rank').notNull(),
+    appearances: integer('appearances').notNull().default(0),
+    firstSeenAt: text('first_seen_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+    metadataJson: text('metadata_json'),
+    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    snapshotRegionVideoUnique: uniqueIndex('idx_youtube_hot_daily_items_snapshot_region_video').on(
+      table.snapshotId,
+      table.regionCode,
+      table.videoId,
+    ),
+    snapshotRegionRankIdx: index('idx_youtube_hot_daily_items_snapshot_region_rank').on(
+      table.snapshotId,
+      table.regionCode,
+      table.lastRank,
+    ),
+    snapshotVideoIdx: index('idx_youtube_hot_daily_items_snapshot_video').on(table.snapshotId, table.videoId),
+    snapshotCategoryIdx: index('idx_youtube_hot_daily_items_snapshot_category').on(table.snapshotId, table.categoryId),
+    regionSnapshotIdx: index('idx_youtube_hot_daily_items_region_snapshot').on(table.regionCode, table.snapshotId),
+  }),
+);
+
 export const youtubeLiveSnapshots = sqliteTable(
   'youtube_live_snapshots',
   {
@@ -894,6 +965,10 @@ export type YouTubeHotHourlySnapshot = typeof youtubeHotHourlySnapshots.$inferSe
 export type NewYouTubeHotHourlySnapshot = typeof youtubeHotHourlySnapshots.$inferInsert;
 export type YouTubeHotHourlyItem = typeof youtubeHotHourlyItems.$inferSelect;
 export type NewYouTubeHotHourlyItem = typeof youtubeHotHourlyItems.$inferInsert;
+export type YouTubeHotDailySnapshot = typeof youtubeHotDailySnapshots.$inferSelect;
+export type NewYouTubeHotDailySnapshot = typeof youtubeHotDailySnapshots.$inferInsert;
+export type YouTubeHotDailyItem = typeof youtubeHotDailyItems.$inferSelect;
+export type NewYouTubeHotDailyItem = typeof youtubeHotDailyItems.$inferInsert;
 export type YouTubeLiveSnapshot = typeof youtubeLiveSnapshots.$inferSelect;
 export type NewYouTubeLiveSnapshot = typeof youtubeLiveSnapshots.$inferInsert;
 export type YouTubeLiveItem = typeof youtubeLiveItems.$inferSelect;
@@ -948,6 +1023,4 @@ export type XTrendHourlySnapshot = typeof xTrendHourlySnapshots.$inferSelect;
 export type NewXTrendHourlySnapshot = typeof xTrendHourlySnapshots.$inferInsert;
 export type XTrendHourlyItem = typeof xTrendHourlyItems.$inferSelect;
 export type NewXTrendHourlyItem = typeof xTrendHourlyItems.$inferInsert;
-
-
 

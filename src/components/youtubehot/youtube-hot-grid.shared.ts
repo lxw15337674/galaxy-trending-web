@@ -16,7 +16,7 @@ type YouTubeHotMessages = ReturnType<typeof getMessages>['youtubeHot'];
 export const DEFAULT_PAGE_SIZE = 20;
 
 export function buildItemKey(item: YouTubeHotQueryItem) {
-  return `${item.snapshotHour}-${item.regionCode}-${item.rank}-${item.videoId}`;
+  return `${item.snapshotDate}-${item.regionCode}-${item.rank}-${item.videoId}`;
 }
 
 export function mergeItems(current: YouTubeHotQueryItem[], next: YouTubeHotQueryItem[]) {

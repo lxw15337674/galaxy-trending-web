@@ -23,7 +23,6 @@ export interface YouTubeHotItem {
   videoId: string;
   videoUrl: string;
   title: string;
-  description: string | null;
   thumbnailUrl: string | null;
   categoryId: string | null;
   categoryTitle: string | null;
@@ -66,19 +65,20 @@ export type YouTubeHotRegionResult = YouTubeHotRegionSuccess | YouTubeHotRegionF
 
 export interface YouTubeHotLatestBatch {
   id: number;
-  snapshotHour: string;
+  snapshotDate: string;
   generatedAt: string;
   regionCount: number;
-  successRegionCount: number;
-  failedRegionCount: number;
+  itemCount: number;
 }
 
 export interface YouTubeHotQueryItem {
-  snapshotHour: string;
+  snapshotDate: string;
   fetchedAt: string;
   regionCode: string;
   regionName: string;
   rank: number;
+  bestRank?: number;
+  appearances?: number;
   videoId: string;
   videoUrl: string;
   title: string;

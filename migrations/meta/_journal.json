@@ -64,6 +64,20 @@
       "when": 1775037431288,
       "tag": "0008_abandoned_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1778120400000,
+      "tag": "0009_null_youtube_hot_descriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1778124000000,
+      "tag": "0010_youtube_hot_daily_aggregation",
+      "breakpoints": true
     }
   ]
 }

@@ -17,7 +17,7 @@ export interface YouTubeHotInitialData {
 
 export interface YouTubeHotHistoryResponse {
   batch: {
-    snapshotHour: string;
+    snapshotDate: string;
     generatedAt: string;
   } | null;
   pagination: {

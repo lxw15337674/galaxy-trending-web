@@ -27,6 +27,20 @@ export function parseSnapshotDate(input: string): string | null {
   return parsed.tz(YOUTUBE_HOT_TIMEZONE).format(SNAPSHOT_DATE_FORMAT);
 }
 
+export function parseUtcSnapshotDate(input: string): string | null {
+  const value = input.trim();
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10) === value ? value : null;
+}
+
 export function toSnapshotHour(input: dayjs.ConfigType = new Date()): string {
   return dayjs(input).tz(YOUTUBE_HOT_TIMEZONE).startOf('hour').format(SNAPSHOT_HOUR_FORMAT);
 }
@@ -49,4 +63,23 @@ export function snapshotDateFromHour(input: string): string | null {
   const parsedHour = parseSnapshotHour(input);
   if (!parsedHour) return null;
   return dayjs.tz(parsedHour, YOUTUBE_HOT_TIMEZONE).format(SNAPSHOT_DATE_FORMAT);
+}
+
+export function utcSnapshotDateFromHour(input: string): string | null {
+  const parsedHour = parseSnapshotHour(input);
+  if (!parsedHour) return null;
+  return dayjs.tz(parsedHour, YOUTUBE_HOT_TIMEZONE).utc().format(SNAPSHOT_DATE_FORMAT);
+}
+
+export function snapshotHourRangeForUtcDate(snapshotDate: string): { startHour: string; endHour: string } | null {
+  const parsedDate = parseUtcSnapshotDate(snapshotDate);
+  if (!parsedDate) return null;
+
+  const start = dayjs.utc(`${parsedDate} 00:00:00`);
+  if (!start.isValid()) return null;
+
+  return {
+    startHour: start.tz(YOUTUBE_HOT_TIMEZONE).format(SNAPSHOT_HOUR_FORMAT),
+    endHour: start.add(1, 'day').tz(YOUTUBE_HOT_TIMEZONE).format(SNAPSHOT_HOUR_FORMAT),
+  };
 }

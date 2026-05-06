@@ -587,6 +587,14 @@ async function main() {
 
   const snapshotDatasets: SnapshotDatasetSpec[] = [
     {
+      name: 'youtubeHotDaily',
+      snapshotTable: 'youtube_hot_daily_snapshots',
+      snapshotDateColumn: 'snapshot_date',
+      deleteDays: 30,
+      itemTable: 'youtube_hot_daily_items',
+      itemSnapshotIdColumn: 'snapshot_id',
+    },
+    {
       name: 'youtubeLive',
       snapshotTable: 'youtube_live_snapshots',
       snapshotDateColumn: 'crawled_at',

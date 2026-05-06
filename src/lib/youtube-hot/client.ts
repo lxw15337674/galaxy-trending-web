@@ -7,7 +7,6 @@ interface YouTubeMostPopularVideo {
   videoId: string;
   videoUrl: string;
   title: string;
-  description: string | null;
   thumbnailUrl: string | null;
   categoryId: string | null;
   publishedAt: string | null;
@@ -202,7 +201,6 @@ export class YouTubeDataApiClient {
           videoId,
           videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
           title,
-          description: typeof entry?.snippet?.description === 'string' ? entry.snippet.description : null,
           thumbnailUrl: pickThumbnail(entry?.snippet?.thumbnails),
           categoryId: normalizeCategoryId(entry?.snippet?.categoryId),
           publishedAt: typeof entry?.snippet?.publishedAt === 'string' ? entry.snippet.publishedAt : null,
@@ -430,4 +428,3 @@ export class YouTubeDataApiClient {
     return result;
   }
 }
-

@@ -18,6 +18,7 @@
     "crawl:tiktok:videos": "tsx scripts/crawl-tiktok-videos-hourly.ts",
     "spike:tiktok:hashtag": "tsx scripts/spike-tiktok-hashtag-trends.ts",
     "crawl:youtube:trending": "tsx scripts/crawl-youtube-trending-hourly.ts",
+    "rebuild:youtube:trending:daily": "tsx scripts/rebuild-youtube-hot-daily.ts",
     "crawl:youtube:music:weekly": "tsx scripts/crawl-youtube-music-weekly.ts",
     "crawl:youtube:music:videos:daily": "tsx scripts/crawl-youtube-music-videos-daily.ts",
     "crawl:youtube:music:shorts:daily": "tsx scripts/crawl-youtube-music-shorts-songs-daily.ts",

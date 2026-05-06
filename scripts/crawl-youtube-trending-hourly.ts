@@ -127,7 +127,6 @@ async function crawlOneRegion(params: {
         videoId: video.videoId,
         videoUrl: video.videoUrl,
         title: video.title,
-        description: video.description,
         thumbnailUrl: video.thumbnailUrl,
         categoryId: video.categoryId,
         categoryTitle: video.categoryId ? categoryNameMap.get(video.categoryId) ?? null : null,
@@ -293,7 +292,7 @@ async function main() {
   const { saveYouTubeHotHourlyResults } = await import('../src/lib/youtube-hot/db');
   const summary = await saveYouTubeHotHourlyResults(options.snapshotHour, finalResults);
   console.log(
-    `\nstored youtube trending snapshot hour=${options.snapshotHour} success=${summary.success} failed=${summary.failed} status=${summary.batch.failedRegionCount === 0 ? 'published' : 'failed'}`,
+    `\nstored youtube trending snapshot hour=${options.snapshotHour} snapshotDate=${summary.batch.snapshotDate} success=${summary.success} failed=${summary.failed} status=${summary.failed === 0 ? 'published' : 'failed'} dailyItems=${summary.batch.itemCount}`,
   );
 }
 
