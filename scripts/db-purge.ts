@@ -10,11 +10,13 @@ interface CliOptions {
   scrubDays: number;
   deleteDays: number;
   dryRun: boolean;
+  datasetNames: string[] | null;
 }
 
 interface QueryExecutor {
   all: <T = unknown>(query: ReturnType<typeof sql.raw>) => Promise<T[]>;
   run: (query: ReturnType<typeof sql.raw>) => Promise<unknown>;
+  transaction?: <T>(callback: (tx: QueryExecutor) => Promise<T>) => Promise<T>;
 }
 
 interface RetentionSummary {
@@ -32,6 +34,8 @@ interface BatchDatasetSpec {
   batchDateColumn: string;
   snapshotTable: string;
   snapshotBatchIdColumn: string;
+  scrubDays?: number;
+  deleteDays?: number;
   itemTable?: string;
   itemSnapshotIdColumn?: string;
   scrubSnapshotColumns?: string[];
@@ -42,11 +46,24 @@ interface SnapshotDatasetSpec {
   name: string;
   snapshotTable: string;
   snapshotDateColumn: string;
+  scrubDays?: number;
+  deleteDays?: number;
   itemTable?: string;
   itemSnapshotIdColumn?: string;
   scrubSnapshotColumns?: string[];
   scrubItemColumns?: string[];
 }
+
+interface RetentionCutoffs {
+  scrubIso: string;
+  deleteIso: string;
+  scrubHour: string;
+  deleteHour: string;
+  scrubDate: string;
+  deleteDate: string;
+}
+
+const APPLY_BATCH_SIZE = 1000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,12 +135,52 @@ function parseCliArgs(): CliOptions {
 
   const deleteDays = parsePositiveInt(parseOption('delete-days') ?? parseOption('days'), 7, 1, 3650);
   const scrubDays = parsePositiveInt(parseOption('scrub-days'), 1, 1, 3650);
+  const datasetsArg = parseOption('datasets');
 
   if (scrubDays >= deleteDays) {
     throw new Error(`Invalid retention window: scrubDays=${scrubDays} must be smaller than deleteDays=${deleteDays}.`);
   }
 
-  return { scrubDays, deleteDays, dryRun };
+  const datasetNames = datasetsArg
+    ? Array.from(
+        new Set(
+          datasetsArg
+            .split(',')
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0),
+        ),
+      )
+    : null;
+
+  return { scrubDays, deleteDays, dryRun, datasetNames };
+}
+
+function buildRetentionCutoffs(now: number, scrubDays: number, deleteDays: number): RetentionCutoffs {
+  const scrubDate = new Date(now - scrubDays * 24 * 60 * 60 * 1000);
+  const deleteDate = new Date(now - deleteDays * 24 * 60 * 60 * 1000);
+
+  return {
+    scrubIso: scrubDate.toISOString(),
+    deleteIso: deleteDate.toISOString(),
+    scrubHour: toSnapshotHour(scrubDate),
+    deleteHour: toSnapshotHour(deleteDate),
+    scrubDate: toSnapshotDate(scrubDate),
+    deleteDate: toSnapshotDate(deleteDate),
+  };
+}
+
+function resolveRetentionDays(
+  spec: Pick<BatchDatasetSpec | SnapshotDatasetSpec, 'name' | 'scrubDays' | 'deleteDays'>,
+  defaults: Pick<CliOptions, 'scrubDays' | 'deleteDays'>,
+) {
+  const scrubDays = spec.scrubDays ?? defaults.scrubDays;
+  const deleteDays = spec.deleteDays ?? defaults.deleteDays;
+
+  if (scrubDays >= deleteDays) {
+    throw new Error(`Invalid retention window for ${spec.name}: scrubDays=${scrubDays} must be smaller than deleteDays=${deleteDays}.`);
+  }
+
+  return { scrubDays, deleteDays };
 }
 
 function sqlString(value: string) {
@@ -139,6 +196,21 @@ async function execute(executor: QueryExecutor, query: string) {
   await withDbRetry('execute', () => executor.run(sql.raw(query)));
 }
 
+async function applyInBatches(
+  executor: QueryExecutor,
+  countQuery: string,
+  applyQueryBuilder: (limit: number) => string,
+) {
+  while (true) {
+    const remaining = await queryCount(executor, countQuery);
+    if (remaining <= 0) {
+      return;
+    }
+
+    await execute(executor, applyQueryBuilder(APPLY_BATCH_SIZE));
+  }
+}
+
 function buildNullCheck(alias: string, columns: string[]) {
   return columns.map((column) => `${alias}.${column} IS NOT NULL`).join(' OR ');
 }
@@ -150,13 +222,9 @@ function buildNullAssignments(columns: string[]) {
 async function purgeBatchDataset(
   executor: QueryExecutor,
   spec: BatchDatasetSpec,
-  cutoffs: {
-    scrubHour: string;
-    deleteHour: string;
-  },
+  cutoffs: RetentionCutoffs,
   applyChanges: boolean,
 ) {
-  const shouldCount = !applyChanges;
   const scrubWindowCondition = [
     `b.${spec.batchDateColumn} < ${sqlString(cutoffs.scrubHour)}`,
     `b.${spec.batchDateColumn} >= ${sqlString(cutoffs.deleteHour)}`,
@@ -164,7 +232,7 @@ async function purgeBatchDataset(
   const deleteCondition = `b.${spec.batchDateColumn} < ${sqlString(cutoffs.deleteHour)}`;
 
   const scrubbedSnapshots =
-    shouldCount && spec.scrubSnapshotColumns?.length
+    spec.scrubSnapshotColumns?.length
       ? await queryCount(
           executor,
           `
@@ -178,9 +246,16 @@ async function purgeBatchDataset(
       : 0;
 
   if (applyChanges && scrubbedSnapshots > 0 && spec.scrubSnapshotColumns?.length) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.snapshotTable} s
+        JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
+        WHERE ${scrubWindowCondition}
+          AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+      `,
+      (limit) => `
         UPDATE ${spec.snapshotTable}
         SET ${buildNullAssignments(spec.scrubSnapshotColumns)}
         WHERE id IN (
@@ -189,13 +264,14 @@ async function purgeBatchDataset(
           JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
           WHERE ${scrubWindowCondition}
             AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+          LIMIT ${limit}
         )
       `,
     );
   }
 
   const scrubbedItems =
-    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
+    spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
       ? await queryCount(
           executor,
           `
@@ -216,9 +292,17 @@ async function purgeBatchDataset(
     spec.itemSnapshotIdColumn &&
     spec.scrubItemColumns?.length
   ) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.itemTable} i
+        JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
+        JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
+        WHERE ${scrubWindowCondition}
+          AND (${buildNullCheck('i', spec.scrubItemColumns)})
+      `,
+      (limit) => `
         UPDATE ${spec.itemTable}
         SET ${buildNullAssignments(spec.scrubItemColumns)}
         WHERE id IN (
@@ -228,6 +312,7 @@ async function purgeBatchDataset(
           JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
           WHERE ${scrubWindowCondition}
             AND (${buildNullCheck('i', spec.scrubItemColumns)})
+          LIMIT ${limit}
         )
       `,
     );
@@ -243,17 +328,15 @@ async function purgeBatchDataset(
   );
   const deletedSnapshots = await queryCount(
     executor,
-    shouldCount
-      ? `
-          SELECT COUNT(*) as total
-          FROM ${spec.snapshotTable} s
-          JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
-          WHERE ${deleteCondition}
-        `
-      : `SELECT 0 as total`,
+    `
+      SELECT COUNT(*) as total
+      FROM ${spec.snapshotTable} s
+      JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
+      WHERE ${deleteCondition}
+    `,
   );
   const deletedItems =
-    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn
+    spec.itemTable && spec.itemSnapshotIdColumn
       ? await queryCount(
           executor,
           `
@@ -267,11 +350,21 @@ async function purgeBatchDataset(
       : 0;
 
   if (applyChanges && deletedBatches > 0) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.batchTable} b
+        WHERE ${deleteCondition}
+      `,
+      (limit) => `
         DELETE FROM ${spec.batchTable}
-        WHERE ${spec.batchDateColumn} < ${sqlString(cutoffs.deleteHour)}
+        WHERE id IN (
+          SELECT b.id
+          FROM ${spec.batchTable} b
+          WHERE ${deleteCondition}
+          LIMIT ${limit}
+        )
       `,
     );
   }
@@ -289,17 +382,9 @@ async function purgeBatchDataset(
 async function purgeSnapshotDataset(
   executor: QueryExecutor,
   spec: SnapshotDatasetSpec,
-  cutoffs: {
-    scrubIso: string;
-    deleteIso: string;
-    scrubHour: string;
-    deleteHour: string;
-    scrubDate: string;
-    deleteDate: string;
-  },
+  cutoffs: RetentionCutoffs,
   applyChanges: boolean,
 ) {
-  const shouldCount = !applyChanges;
   const isDateOnly = spec.snapshotDateColumn.endsWith('_date');
   const isHourText = spec.snapshotDateColumn.endsWith('_hour');
   const scrubCutoff = isDateOnly ? cutoffs.scrubDate : isHourText ? cutoffs.scrubHour : cutoffs.scrubIso;
@@ -311,7 +396,7 @@ async function purgeSnapshotDataset(
   const deleteCondition = `s.${spec.snapshotDateColumn} < ${sqlString(deleteCutoff)}`;
 
   const scrubbedSnapshots =
-    shouldCount && spec.scrubSnapshotColumns?.length
+    spec.scrubSnapshotColumns?.length
       ? await queryCount(
           executor,
           `
@@ -324,20 +409,30 @@ async function purgeSnapshotDataset(
       : 0;
 
   if (applyChanges && scrubbedSnapshots > 0 && spec.scrubSnapshotColumns?.length) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.snapshotTable} s
+        WHERE ${scrubWindowCondition}
+          AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+      `,
+      (limit) => `
         UPDATE ${spec.snapshotTable}
         SET ${buildNullAssignments(spec.scrubSnapshotColumns)}
-        WHERE ${spec.snapshotDateColumn} < ${sqlString(scrubCutoff)}
-          AND ${spec.snapshotDateColumn} >= ${sqlString(deleteCutoff)}
-          AND (${spec.scrubSnapshotColumns.map((column) => `${column} IS NOT NULL`).join(' OR ')})
+        WHERE id IN (
+          SELECT s.id
+          FROM ${spec.snapshotTable} s
+          WHERE ${scrubWindowCondition}
+            AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+          LIMIT ${limit}
+        )
       `,
     );
   }
 
   const scrubbedItems =
-    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
+    spec.itemTable && spec.itemSnapshotIdColumn && spec.scrubItemColumns?.length
       ? await queryCount(
           executor,
           `
@@ -357,9 +452,16 @@ async function purgeSnapshotDataset(
     spec.itemSnapshotIdColumn &&
     spec.scrubItemColumns?.length
   ) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.itemTable} i
+        JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
+        WHERE ${scrubWindowCondition}
+          AND (${buildNullCheck('i', spec.scrubItemColumns)})
+      `,
+      (limit) => `
         UPDATE ${spec.itemTable}
         SET ${buildNullAssignments(spec.scrubItemColumns)}
         WHERE id IN (
@@ -368,6 +470,7 @@ async function purgeSnapshotDataset(
           JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
           WHERE ${scrubWindowCondition}
             AND (${buildNullCheck('i', spec.scrubItemColumns)})
+          LIMIT ${limit}
         )
       `,
     );
@@ -375,16 +478,14 @@ async function purgeSnapshotDataset(
 
   const deletedSnapshots = await queryCount(
     executor,
-    shouldCount
-      ? `
-          SELECT COUNT(*) as total
-          FROM ${spec.snapshotTable} s
-          WHERE ${deleteCondition}
-        `
-      : `SELECT 0 as total`,
+    `
+      SELECT COUNT(*) as total
+      FROM ${spec.snapshotTable} s
+      WHERE ${deleteCondition}
+    `,
   );
   const deletedItems =
-    shouldCount && spec.itemTable && spec.itemSnapshotIdColumn
+    spec.itemTable && spec.itemSnapshotIdColumn
       ? await queryCount(
           executor,
           `
@@ -397,11 +498,21 @@ async function purgeSnapshotDataset(
       : 0;
 
   if (applyChanges && deletedSnapshots > 0) {
-    await execute(
+    await applyInBatches(
       executor,
       `
+        SELECT COUNT(*) as total
+        FROM ${spec.snapshotTable} s
+        WHERE ${deleteCondition}
+      `,
+      (limit) => `
         DELETE FROM ${spec.snapshotTable}
-        WHERE ${spec.snapshotDateColumn} < ${sqlString(deleteCutoff)}
+        WHERE id IN (
+          SELECT s.id
+          FROM ${spec.snapshotTable} s
+          WHERE ${deleteCondition}
+          LIMIT ${limit}
+        )
       `,
     );
   }
@@ -421,19 +532,10 @@ async function main() {
 
   const options = parseCliArgs();
   const now = Date.now();
-  const scrubDate = new Date(now - options.scrubDays * 24 * 60 * 60 * 1000);
-  const deleteDate = new Date(now - options.deleteDays * 24 * 60 * 60 * 1000);
-  const cutoffs = {
-    scrubIso: scrubDate.toISOString(),
-    deleteIso: deleteDate.toISOString(),
-    scrubHour: toSnapshotHour(scrubDate),
-    deleteHour: toSnapshotHour(deleteDate),
-    scrubDate: toSnapshotDate(scrubDate),
-    deleteDate: toSnapshotDate(deleteDate),
-  };
+  const cutoffs = buildRetentionCutoffs(now, options.scrubDays, options.deleteDays);
 
   console.log(
-    `scrubDays=${options.scrubDays}, deleteDays=${options.deleteDays}, dryRun=${options.dryRun}, scrubIso=${cutoffs.scrubIso}, deleteIso=${cutoffs.deleteIso}, scrubHour=${cutoffs.scrubHour}, deleteHour=${cutoffs.deleteHour}, scrubDate=${cutoffs.scrubDate}, deleteDate=${cutoffs.deleteDate}`,
+    `scrubDays=${options.scrubDays}, deleteDays=${options.deleteDays}, dryRun=${options.dryRun}, datasets=${options.datasetNames?.join(',') ?? 'all'}, scrubIso=${cutoffs.scrubIso}, deleteIso=${cutoffs.deleteIso}, scrubHour=${cutoffs.scrubHour}, deleteHour=${cutoffs.deleteHour}, scrubDate=${cutoffs.scrubDate}, deleteDate=${cutoffs.deleteDate}`,
   );
 
   const batchDatasets: BatchDatasetSpec[] = [
@@ -443,6 +545,7 @@ async function main() {
       batchDateColumn: 'snapshot_hour',
       snapshotTable: 'youtube_hot_hourly_snapshots',
       snapshotBatchIdColumn: 'batch_id',
+      scrubDays: 3,
       itemTable: 'youtube_hot_hourly_items',
       itemSnapshotIdColumn: 'snapshot_id',
       scrubSnapshotColumns: ['raw_payload'],
@@ -566,26 +669,46 @@ async function main() {
 
   const runPurge = async (executor: QueryExecutor, applyChanges: boolean) => {
     const summaries: RetentionSummary[] = [];
+    const datasetFilter = options.datasetNames ? new Set(options.datasetNames) : null;
 
     for (const dataset of batchDatasets) {
+      if (datasetFilter && !datasetFilter.has(dataset.name)) continue;
+      const retention = resolveRetentionDays(dataset, options);
+      const runOne = (queryExecutor: QueryExecutor) =>
+        purgeBatchDataset(
+          queryExecutor,
+          dataset,
+          buildRetentionCutoffs(now, retention.scrubDays, retention.deleteDays),
+          applyChanges,
+        );
       summaries.push(
-        await purgeBatchDataset(executor, dataset, {
-          scrubHour: cutoffs.scrubHour,
-          deleteHour: cutoffs.deleteHour,
-        }, applyChanges),
+        applyChanges && executor.transaction
+          ? await executor.transaction((tx) => runOne(tx as QueryExecutor))
+          : await runOne(executor),
       );
     }
 
     for (const dataset of snapshotDatasets) {
-      summaries.push(await purgeSnapshotDataset(executor, dataset, cutoffs, applyChanges));
+      if (datasetFilter && !datasetFilter.has(dataset.name)) continue;
+      const retention = resolveRetentionDays(dataset, options);
+      const runOne = (queryExecutor: QueryExecutor) =>
+        purgeSnapshotDataset(
+          queryExecutor,
+          dataset,
+          buildRetentionCutoffs(now, retention.scrubDays, retention.deleteDays),
+          applyChanges,
+        );
+      summaries.push(
+        applyChanges && executor.transaction
+          ? await executor.transaction((tx) => runOne(tx as QueryExecutor))
+          : await runOne(executor),
+      );
     }
 
     return summaries;
   };
 
-  const summaries = options.dryRun
-    ? await runPurge(db as QueryExecutor, false)
-    : await db.transaction((tx) => runPurge(tx as QueryExecutor, true));
+  const summaries = await runPurge(db as QueryExecutor, !options.dryRun);
 
   for (const summary of summaries) {
     console.log(
