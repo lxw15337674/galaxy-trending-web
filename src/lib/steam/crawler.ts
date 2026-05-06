@@ -275,6 +275,25 @@ function parseChartItems(chartType: SteamChartType, html: string) {
   return parseMostPlayed(html);
 }
 
+export function dedupeSteamChartItems(items: SteamChartItem[]): SteamChartItem[] {
+  const seen = new Set<string>();
+  const dedupedItems: SteamChartItem[] = [];
+
+  for (const item of items) {
+    if (seen.has(item.steamItemId)) {
+      continue;
+    }
+
+    seen.add(item.steamItemId);
+    dedupedItems.push({
+      ...item,
+      rank: dedupedItems.length + 1,
+    });
+  }
+
+  return dedupedItems;
+}
+
 export class SteamChartsCrawler {
   async fetchChart(chartType: SteamChartType, snapshotHour: string): Promise<SteamChartSnapshot> {
     const source = STEAM_CHART_SOURCES[chartType];
@@ -296,7 +315,8 @@ export class SteamChartsCrawler {
       html = await fetchSteamHtmlViaPowerShell(source.sourceUrl);
     }
 
-    const items = parseChartItems(chartType, html);
+    const parsedItems = parseChartItems(chartType, html);
+    const items = dedupeSteamChartItems(parsedItems);
     const fetchedAt = new Date().toISOString();
 
     if (!items.length) {
