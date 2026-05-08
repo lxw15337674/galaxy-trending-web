@@ -240,7 +240,7 @@ async function purgeBatchDataset(
             FROM ${spec.snapshotTable} s
             JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
             WHERE ${scrubWindowCondition}
-              AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+              AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
           `,
         )
       : 0;
@@ -253,17 +253,17 @@ async function purgeBatchDataset(
         FROM ${spec.snapshotTable} s
         JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
         WHERE ${scrubWindowCondition}
-          AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+          AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
       `,
       (limit) => `
         UPDATE ${spec.snapshotTable}
-        SET ${buildNullAssignments(spec.scrubSnapshotColumns)}
+        SET ${buildNullAssignments(spec.scrubSnapshotColumns!)}
         WHERE id IN (
           SELECT s.id
           FROM ${spec.snapshotTable} s
           JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
           WHERE ${scrubWindowCondition}
-            AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+            AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
           LIMIT ${limit}
         )
       `,
@@ -280,7 +280,7 @@ async function purgeBatchDataset(
             JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
             JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
             WHERE ${scrubWindowCondition}
-              AND (${buildNullCheck('i', spec.scrubItemColumns)})
+              AND (${buildNullCheck('i', spec.scrubItemColumns!)})
           `,
         )
       : 0;
@@ -300,18 +300,18 @@ async function purgeBatchDataset(
         JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
         JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
         WHERE ${scrubWindowCondition}
-          AND (${buildNullCheck('i', spec.scrubItemColumns)})
+          AND (${buildNullCheck('i', spec.scrubItemColumns!)})
       `,
       (limit) => `
         UPDATE ${spec.itemTable}
-        SET ${buildNullAssignments(spec.scrubItemColumns)}
+        SET ${buildNullAssignments(spec.scrubItemColumns!)}
         WHERE id IN (
           SELECT i.id
           FROM ${spec.itemTable} i
           JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
           JOIN ${spec.batchTable} b ON b.id = s.${spec.snapshotBatchIdColumn}
           WHERE ${scrubWindowCondition}
-            AND (${buildNullCheck('i', spec.scrubItemColumns)})
+            AND (${buildNullCheck('i', spec.scrubItemColumns!)})
           LIMIT ${limit}
         )
       `,
@@ -403,7 +403,7 @@ async function purgeSnapshotDataset(
             SELECT COUNT(*) as total
             FROM ${spec.snapshotTable} s
             WHERE ${scrubWindowCondition}
-              AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+              AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
           `,
         )
       : 0;
@@ -415,16 +415,16 @@ async function purgeSnapshotDataset(
         SELECT COUNT(*) as total
         FROM ${spec.snapshotTable} s
         WHERE ${scrubWindowCondition}
-          AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+          AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
       `,
       (limit) => `
         UPDATE ${spec.snapshotTable}
-        SET ${buildNullAssignments(spec.scrubSnapshotColumns)}
+        SET ${buildNullAssignments(spec.scrubSnapshotColumns!)}
         WHERE id IN (
           SELECT s.id
           FROM ${spec.snapshotTable} s
           WHERE ${scrubWindowCondition}
-            AND (${buildNullCheck('s', spec.scrubSnapshotColumns)})
+            AND (${buildNullCheck('s', spec.scrubSnapshotColumns!)})
           LIMIT ${limit}
         )
       `,
@@ -440,7 +440,7 @@ async function purgeSnapshotDataset(
             FROM ${spec.itemTable} i
             JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
             WHERE ${scrubWindowCondition}
-              AND (${buildNullCheck('i', spec.scrubItemColumns)})
+              AND (${buildNullCheck('i', spec.scrubItemColumns!)})
           `,
         )
       : 0;
@@ -459,17 +459,17 @@ async function purgeSnapshotDataset(
         FROM ${spec.itemTable} i
         JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
         WHERE ${scrubWindowCondition}
-          AND (${buildNullCheck('i', spec.scrubItemColumns)})
+          AND (${buildNullCheck('i', spec.scrubItemColumns!)})
       `,
       (limit) => `
         UPDATE ${spec.itemTable}
-        SET ${buildNullAssignments(spec.scrubItemColumns)}
+        SET ${buildNullAssignments(spec.scrubItemColumns!)}
         WHERE id IN (
           SELECT i.id
           FROM ${spec.itemTable} i
           JOIN ${spec.snapshotTable} s ON s.id = i.${spec.itemSnapshotIdColumn}
           WHERE ${scrubWindowCondition}
-            AND (${buildNullCheck('i', spec.scrubItemColumns)})
+            AND (${buildNullCheck('i', spec.scrubItemColumns!)})
           LIMIT ${limit}
         )
       `,
@@ -642,33 +642,6 @@ async function main() {
       snapshotTable: 'spotify_chart_snapshots',
       snapshotDateColumn: 'chart_end_date',
       itemTable: 'spotify_chart_items',
-      itemSnapshotIdColumn: 'snapshot_id',
-      scrubSnapshotColumns: ['raw_payload'],
-      scrubItemColumns: ['raw_item_json'],
-    },
-    {
-      name: 'steam',
-      snapshotTable: 'steam_chart_snapshots',
-      snapshotDateColumn: 'snapshot_hour',
-      itemTable: 'steam_chart_items',
-      itemSnapshotIdColumn: 'snapshot_id',
-      scrubSnapshotColumns: ['raw_payload'],
-      scrubItemColumns: ['raw_item_json'],
-    },
-    {
-      name: 'appStoreGames',
-      snapshotTable: 'app_store_game_chart_snapshots',
-      snapshotDateColumn: 'snapshot_hour',
-      itemTable: 'app_store_game_chart_items',
-      itemSnapshotIdColumn: 'snapshot_id',
-      scrubSnapshotColumns: ['raw_payload'],
-      scrubItemColumns: ['raw_item_json'],
-    },
-    {
-      name: 'googlePlayGames',
-      snapshotTable: 'google_play_game_chart_snapshots',
-      snapshotDateColumn: 'snapshot_hour',
-      itemTable: 'google_play_game_chart_items',
       itemSnapshotIdColumn: 'snapshot_id',
       scrubSnapshotColumns: ['raw_payload'],
       scrubItemColumns: ['raw_item_json'],

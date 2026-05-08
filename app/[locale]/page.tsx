@@ -98,18 +98,6 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       description: messages.home.spotifyDescription,
     },
     {
-      href: `/${locale}/steam`,
-      platform: 'Steam',
-      label: messages.common.navSteam,
-      description: messages.home.steamDescription,
-    },
-    {
-      href: `/${locale}/games`,
-      platform: 'App Store / Google Play',
-      label: messages.common.navAppStoreGames,
-      description: messages.home.appStoreGamesDescription,
-    },
-    {
       href: `/${locale}/youtube-music/videos-daily`,
       platform: 'YouTube Music',
       label: messages.youtubeMusicVideosDaily.title,

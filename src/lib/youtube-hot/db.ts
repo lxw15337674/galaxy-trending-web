@@ -1067,7 +1067,7 @@ export async function saveYouTubeHotHourlyResults(snapshotHour: string, results:
           generatedAt: snapshotHour,
           regionCount: results.length,
           itemCount: normalizedResults.reduce(
-            (total, result) => total + (result.status === 'success' ? result.items.length : 0),
+            (total, result) => total + (result.status === 'success' ? (result.items?.length ?? 0) : 0),
             0,
           ),
         } satisfies YouTubeHotLatestBatch,

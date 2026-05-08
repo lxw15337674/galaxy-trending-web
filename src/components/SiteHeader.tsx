@@ -81,18 +81,6 @@ function SiteHeaderFrame({
       mobileLabel: t.navMusicShort,
     },
     {
-      paths: ['/steam'],
-      href: withLocalePrefix('/steam', locale),
-      label: t.navSteam,
-      mobileLabel: t.navSteamShort,
-    },
-    {
-      paths: ['/games'],
-      href: withLocalePrefix('/games', locale),
-      label: t.navAppStoreGames,
-      mobileLabel: t.navAppStoreGamesShort,
-    },
-    {
       paths: ['/youtube-live'],
       href: withLocalePrefix('/youtube-live', locale),
       label: t.navYouTubeLive,
