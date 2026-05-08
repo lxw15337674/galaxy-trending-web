@@ -15,7 +15,6 @@
     "crawl:x:trending": "tsx scripts/crawl-x-trending-hourly.ts",
     "spike:x:trends": "tsx scripts/spike-x-trends.ts",
     "crawl:tiktok:hashtag": "tsx scripts/crawl-tiktok-hashtag-hourly.ts",
-    "crawl:tiktok:videos": "tsx scripts/crawl-tiktok-videos-hourly.ts",
     "spike:tiktok:hashtag": "tsx scripts/spike-tiktok-hashtag-trends.ts",
     "crawl:youtube:trending": "tsx scripts/crawl-youtube-trending-hourly.ts",
     "rebuild:youtube:trending:daily": "tsx scripts/rebuild-youtube-hot-daily.ts",

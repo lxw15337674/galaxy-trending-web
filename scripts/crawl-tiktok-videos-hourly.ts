@@ -188,6 +188,13 @@ async function main() {
   }
 
   const failedResults = crawlResult.results.filter((result): result is Extract<TikTokVideoTargetResult, { status: 'failed' }> => result.status === 'failed');
+  if (summary.successCount === 0) {
+    console.error(
+      `crawl-tiktok-videos-hourly failed with no successful scopes: failed=${summary.failedCount} source=tiktok-creative-center`,
+    );
+    exitIfFailures(summary.failedCount);
+  }
+
   if (failedResults.length > 0 && failedResults.every(isRecoverableTikTokVideoFailure)) {
     console.warn(
       `crawl-tiktok-videos-hourly completed with recoverable upstream failures: failed=${summary.failedCount} source=tiktok-creative-center`,

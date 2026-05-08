@@ -48,8 +48,7 @@ function isLocaleSwitchablePath(barePath: string) {
     barePath.startsWith('/youtube-trending/') ||
     barePath === '/x-trending' ||
     barePath.startsWith('/reddit') ||
-    barePath === '/tiktok-trending' ||
-    barePath === '/tiktok-videos'
+    barePath === '/tiktok-trending'
   );
 }
 
@@ -109,12 +108,6 @@ function SiteHeaderFrame({
       href: withLocalePrefix('/tiktok-trending', locale),
       label: t.navTikTokTrends,
       mobileLabel: t.navTikTokTrendsShort,
-    },
-    {
-      paths: ['/tiktok-videos'],
-      href: withLocalePrefix('/tiktok-videos', locale),
-      label: t.navTikTokVideos,
-      mobileLabel: t.navTikTokVideosShort,
     },
   ];
 

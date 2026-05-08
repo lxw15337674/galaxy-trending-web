@@ -133,12 +133,6 @@ export default async function LocaleIndexPage({ params }: LocaleIndexPageProps) 
       label: messages.common.navTikTokTrends,
       description: messages.home.tiktokDescription,
     },
-    {
-      href: `/${locale}/tiktok-videos`,
-      platform: 'TikTok',
-      label: messages.common.navTikTokVideos,
-      description: messages.home.tiktokVideosDescription,
-    },
   ];
 
   return (
